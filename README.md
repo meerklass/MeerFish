@@ -2,8 +2,10 @@
 
 A Fisher forecast code focusing on upcoming large-sky single-dish HI intensity mapping cosmological surveys with MeerKAT and its successor the SKAO.
 
-> "Meer" is Afrikaans for "more", KAT is the Karoo Array Telescope
+>  - "Meer" is Afrikaans for "more", KAT is the Karoo Array Telescope
+
 > To survey the Universe at radio wavelengths we have **MeerKAT**
+
 > For providing more updated Fisher forecasts we have **MeerFish**
 
 The paper accompanying this code *Multipole expansion for HI intensity mapping experiments: simulations and modelling* can be found below:
