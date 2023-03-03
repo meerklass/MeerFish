@@ -8,20 +8,33 @@ c = c_km*1e3
 
 def params(Survey):
 
-    if Survey=='MK_UHF':
-        ### Set cosmology:
+    ### Telescope/survey parameters:
+    if Survey=='MK_2019': # MeerKAT 2019 pilot survey in L-band
+        zmin,zmax = 0.4,0.46
+        A_sky = 100 # area in sq.deg
+        t_tot = 5 # observation hours
+        N_dish = 60 # number of dishes
+        D_dish = 13.5 # diameter of dish [metres]
+    if Survey=='MK_UHF': # MeerKLASS UHF-band
         zmin,zmax = 0.4,1.4
-        zc = (zmax - zmin)/2
-        cosmo.SetCosmology(z=zc)
-        ### Telescope/survey parameters:
         A_sky = 4000 # area in sq.deg
         t_tot = 4000 # observation hours
         N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
-        R_beam = BeamPars(D_dish,zc)[1]
-        V_sur = Vsur(zmin,zmax,A_sky)
-        
-    return zc,zmin,zmax,R_beam,A_sky,t_tot,N_dish,V_sur
+    if Survey=='SKA': # SKA Band 1
+        zmin,zmax = 0.35,3
+        A_sky = 20000 # area in sq.deg
+        t_tot = 10000 # observation hours
+        N_dish = 197 # number of dishes
+        D_dish = 15 # diameter of dish [metres]
+
+    ### Set cosmology:
+    z = (zmax - zmin)/2 # central redshift
+    cosmo.SetCosmology(z=z)
+    R_beam = BeamPars(D_dish,z)[1]
+    V_bin = Vsur(zmin,zmax,A_sky)
+
+    return z,zmin,zmax,R_beam,A_sky,t_tot,N_dish,V_bin
 
 def BeamPars(D_dish,z):
     ''' Calclate FWHM of beam in deg and comoving [Mpc/h] '''

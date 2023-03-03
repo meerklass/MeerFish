@@ -40,7 +40,7 @@ def SetCosmology(builtincosmo='Planck18',z=0,UseCamb=True):
         A_s = 2.14e-9 # Scalar amplitude
         D_z = D(z) # Growth Function (normalised to unity for z=0)
         delta_c = 1.686
-        GetModelPk(z,1e-4,1e0,NonLinear=False) # Use to set global transfer function T
+        MatterPk(z,1e-4,1e0,NonLinear=False) # Use to set global transfer function T
     else:
         global cosmo
         global cosmoNBK
@@ -117,7 +117,7 @@ def T(k):
     return np.log(1+0.171*x)/(0.171*x) * ( 1 + 0.284*x + (1.18*x)**2 + (0.399*x)**3 + (0.49*x)**4 )**-0.25
 '''
 
-def GetModelPk(z,kmin=1e-3,kmax=10,NonLinear=False):
+def MatterPk(z,kmin=1e-3,kmax=10,NonLinear=False):
     '''
     Use pycamb to generate model power spectrum at redshift z
     '''

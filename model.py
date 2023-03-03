@@ -14,8 +14,7 @@ def Freq2Red(v):
 
 def b_HI(z):
     ''' HI linear bias '''
-    '''
-    Use 6 values for HI bias at redshifts 0 to 5 found in Table 5 of
+    '''Use 6 values for HI bias at redshifts 0 to 5 found in Table 5 of
     Villaescusa-Navarro et al.(2018) https://arxiv.org/pdf/1804.09180.pdf
     and get a polyfit function based on these values'''
     #### Code for finding polynomial coeficients: #####
@@ -42,8 +41,7 @@ def Tbar(z,Omega_HI):
 
 def P_SN(z):
     ''' HI shot noise '''
-    '''
-    Use 6 values for HI shot noise at redshifts 0 to 5 found in Table 5 of
+    '''Use 6 values for HI shot noise at redshifts 0 to 5 found in Table 5 of
     Villaescusa-Navarro et al.(2018) https://arxiv.org/pdf/1804.09180.pdf
     and get a polyfit function based on these values'''
     #### Code for finding polynomial coeficients: #####
@@ -80,46 +78,27 @@ def P_N(z,zmin,zmax,A_sky,t_tot,N_dish,T_sys=None,A_pix=0.3**2,deltanu=0.2,epsil
     return P_N
 
 def B_beam(mu,k,R_beam):
+    ''' Gaussian beam model '''
     if R_beam==0: return 1
     return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
 
 def P_HI(k,mu,z,Pmod,cosmopars,surveypars):
-
+    ''' signal model for power spectrum '''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
     return Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
 
 def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars):
-
+    ''' observational power spectrum with noise components '''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return ( Tbar(z,Omega_HI)**2 * ( (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) + P_SN(z) ) ) * B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+    return P_HI(k,mu,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2*P_SN(z)*B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
 
-def Pk(Pmod,kbins,z,theta,surveypars=None,galcross=False):
-    ''' HI signal only part of the power spectrum '''
-
-    if galcross==False:
-        Omega_HI,b_HI,f,bphiHI,f_NL = theta
-    if galcross==True:
-        Omega_HI,b_HI,b_g,f,bphiHI,bphig,f_NL, = theta
-
-    if surveypars is None: t_tot,zmin,zmax,R_beam,A_sky,N_dish = None,0,0,0,0,0
-    else: zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-
-    if galcross==False:
-        Pk_int = lambda mu: Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k_i,z)**(-1))**2 * Pmod(k_i) * B_beam(mu,k_i,R_beam)**2
-        Pk_int_obs = lambda mu: ( Tbar(z,Omega_HI)**2 * ( (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k_i,z)**(-1))**2 * Pmod(k_i) + P_SN(z) ) ) * B_beam(mu,k_i,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
-    if galcross==True:
-        ##### REVISE #######
-        Pk_int = lambda mu: Tbar1*Tbar2 * b1*b2*( r + (beta1 + beta2)*mu**2 + beta1*beta2*mu**4 ) / (1 + (k_i*mu*sigv/H_0)**2) * Pmod(k_i) * B_beam(mu,k_i,R_beam1) * B_beam(mu,k_i,R_beam2) + P_N
-        ####################
-    pkmod = np.zeros(len(k))
-    pkmod_obs = np.zeros(len(k))
-    nmodes = np.zeros(len(k))
+def integratePkmu(Pfunc,k,z,Pmod,cosmopars,surveypars):
+    '''integrate given Pfunc(k,mu) over mu'''
+    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars)
+    Pk = np.zeros(len(k))
     for i in range(len(k)):
         k_i = k[i]
-        pkmod[i] = scipy.integrate.quad(Pk_int, 0, 1)[0]
-        pkmod_obs[i] = scipy.integrate.quad(Pk_int_obs, 0, 1)[0]
-        #nmodes[i] = 1 / (2*np.pi)**3 * (lx*ly*lz) * (4*np.pi*k_i**2*deltak[i]) # Based on eq14 in https://arxiv.org/pdf/1509.03286.pdf
-        nmodes = 1
-    return pkmod,pkmod_obs,k,nmodes
+        Pk[i] = scipy.integrate.quad(Pkmu, 0, 1)[0]
+    return Pk
