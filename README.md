@@ -16,7 +16,7 @@ The paper accompanying this code *Multipole expansion for HI intensity mapping e
 ## Credit:
 
 If you use these codes in your research, we kindly ask
-that you cite this repository [https://github.com/IntensityTools/MultipoleExpansion] and the following papers:
+that you cite this repository [https://github.com/stevecunnington/MeerFish] and the following papers:
 
 ## Contact:
 
