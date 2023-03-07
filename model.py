@@ -82,23 +82,28 @@ def B_beam(mu,k,R_beam):
     if R_beam==0: return 1
     return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
 
-def P_HI(k,mu,z,Pmod,cosmopars,surveypars):
-    ''' signal model for power spectrum '''
+def P_HI(k,mu,z,Pmod,cosmopars,surveypars,ell=0):
+    ''' signal model for power spectrum (monopole as default, change with 'ell') '''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
+    return (2*ell + 1) * Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * L(ell,mu) * B_beam(mu,k,R_beam)**2
 
-def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars):
-    ''' observational power spectrum with noise components '''
+def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars,ell=0):
+    ''' observational power spectrum with noise components (monopole as default, change with 'ell') '''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return P_HI(k,mu,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2*P_SN(z)*B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+    return P_HI(k,mu,z,Pmod,cosmopars,surveypars,ell) + (2*ell + 1) * Tbar(z,Omega_HI)**2 * P_SN(z)  * L(ell,mu) * B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
 
-def integratePkmu(Pfunc,k,z,Pmod,cosmopars,surveypars):
+def integratePkmu(Pfunc,k,z,Pmod,cosmopars,surveypars,ell=0):
     '''integrate given Pfunc(k,mu) over mu'''
-    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars)
+    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars,ell)
     Pk = np.zeros(len(k))
     for i in range(len(k)):
         k_i = k[i]
         Pk[i] = scipy.integrate.quad(Pkmu, 0, 1)[0]
     return Pk
+
+def L(ell,mu):
+    if ell==0: return 1
+    if ell==2: return (3*mu**2 - 1)/2
+    if ell==4: return (35*mu**4 - 30*mu**2 + 3)/8
