@@ -33,25 +33,26 @@ surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish]
 
 ells = [0,2,4]
 for ell in ells:
-    #P_HI = model.integratePkmu(model.P_HI,k,z,Pmod,cosmopars,surveypars,ell=ell)
+    #P_HI = model.P_HI_ell(ell,k,z,Pmod,cosmopars,surveypars)
     #plt.plot(k,P_HI,label=r'$P_{{\rm HI},%s}$'%ell)
-    P_HI_obs = model.integratePkmu(model.P_HI_obs,k,z,Pmod,cosmopars,surveypars,ell=ell)
+    P_HI_obs = model.P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars)
     plt.plot(k,P_HI_obs,label=r'$P^{\rm obs}_{{\rm HI},%s}$'%ell)
 plt.axhline(model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish),color='grey',label=r'$P_{\rm N}$')
 plt.axhline(Tbar**2*model.P_SN(z),color='black',label=r'$\overline{T}_{\rm HI}^2 P_{\rm SN}$')
 plt.legend()
 plt.loglog()
-plt.close()
-#plt.show()
+#plt.close()
+plt.figure()
 #exit()
 
-theta = np.array([['bHI','f'],[b_HI,f]])
-theta = np.array([['bHI','Tbar'],[b_HI,Tbar]])
-theta = np.array([['bHI','f','Tbar'],[b_HI,f,Tbar]])
-theta = np.array([['bHI','f','fNL'],[b_HI,f,f_NL]])
-#theta = np.array([['bHI','f','fNL','Tbar'],[b_HI,f,f_NL,Tbar]])
+theta_ids = [\
+#r'$\overline{T}_{\rm HI}$',\
+r'$b_{\rm HI}$',\
+r'$f$',\
+r'$f_{\rm NL}$'\
+]
 
-F = fisher.Matrix(theta,k,Pmod,z,cosmopars,surveypars,V_bin)
+F = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
 
 C = np.linalg.inv(F)
 Npar = np.shape(C)[0]
@@ -63,10 +64,8 @@ plt.figure()
 plt.imshow(R,vmin=-1,vmax=1,cmap='bwr_r')
 plt.colorbar()
 
-theta_labels = fisher.labels(theta)
+theta = model.get_param_vals(theta_ids,z,cosmopars)
 
-ps = [b_HI,f,f_NL]
-#ps = [theta[1,0],theta[1,1],theta[1,2]]
-
-fisher.CornerPlot(F,ps,theta_labels)
+fisher.CornerPlot(F,theta,theta_ids)
+plt.show()
 exit()

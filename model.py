@@ -12,6 +12,18 @@ def Freq2Red(v):
     # Convert frequency to redshift for HI emission (freq in MHz)
     return (v_21cm/v) - 1
 
+def get_param_vals(ids,z,cosmopars):
+    ''' return model values for parameter strings '''
+    Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
+    vals=[]
+    Npar = len(ids)
+    for i in range(Npar):
+        if ids[i]==r'$\overline{T}_{\rm HI}$': vals.append( Tbar(z,Omega_HI) )
+        if ids[i]==r'$b_{\rm HI}$': vals.append( b_HI )
+        if ids[i]==r'$f$': vals.append( f )
+        if ids[i]==r'$f_{\rm NL}$': vals.append( 0 )
+    return np.array(vals)
+
 def b_HI(z):
     ''' HI linear bias '''
     '''Use 6 values for HI bias at redshifts 0 to 5 found in Table 5 of
@@ -82,21 +94,29 @@ def B_beam(mu,k,R_beam):
     if R_beam==0: return 1
     return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
 
-def P_HI(k,mu,z,Pmod,cosmopars,surveypars,ell=0):
-    ''' signal model for power spectrum (monopole as default, change with 'ell') '''
+def P_HI(k,mu,z,Pmod,cosmopars,surveypars):
+    ''' 2D signal model for power spectrum '''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return (2*ell + 1) * Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * L(ell,mu) * B_beam(mu,k,R_beam)**2
+    return Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
 
-def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars,ell=0):
-    ''' observational power spectrum with noise components (monopole as default, change with 'ell') '''
+def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars):
+    ''' 2D observational power spectrum with noise components'''
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return P_HI(k,mu,z,Pmod,cosmopars,surveypars,ell) + (2*ell + 1) * Tbar(z,Omega_HI)**2 * P_SN(z)  * L(ell,mu) * B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+    return P_HI(k,mu,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
 
-def integratePkmu(Pfunc,k,z,Pmod,cosmopars,surveypars,ell=0):
-    '''integrate given Pfunc(k,mu) over mu'''
-    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars,ell)
+def P_HI_ell(ell,k,z,Pmod,cosmopars,surveypars):
+    ''' Integrate sigma model over mu into multipole ell '''
+    return (2*ell + 1) * integratePkmu(P_HI,ell,k,z,Pmod,cosmopars,surveypars)
+
+def P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars):
+    ''' Integrate observation model over mu into multipole ell '''
+    return (2*ell + 1) * integratePkmu(P_HI_obs,ell,k,z,Pmod,cosmopars,surveypars)
+
+def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars):
+    '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
+    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars) * L(ell,mu)
     Pk = np.zeros(len(k))
     for i in range(len(k)):
         k_i = k[i]
