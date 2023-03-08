@@ -52,7 +52,9 @@ r'$f$',\
 r'$f_{\rm NL}$'\
 ]
 
-F = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+#F = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+ells = [0]
+F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 
 C = np.linalg.inv(F)
 Npar = np.shape(C)[0]
