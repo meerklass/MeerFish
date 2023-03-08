@@ -14,7 +14,7 @@ Survey = 'MK_UHF' # MeerKLASS UHF-band
 #Survey = 'SKA'
 z,zmin,zmax,R_beam,A_sky,t_tot,N_dish,V_bin = survey.params(Survey)
 
-kmin = np.pi/V_bin**(1/3)
+kmin = np.pi/V_bin**(1/3) ### From Tayura https://arxiv.org/pdf/1101.4723.pdf (after eq8)
 kmax = 0.4
 kbins = np.arange(kmin,kmax,kmin)
 k = (kbins[1:] + kbins[:-1])/2 #centre of k bins
@@ -49,14 +49,43 @@ theta_ids = [\
 #r'$\overline{T}_{\rm HI}$',\
 r'$b_{\rm HI}$',\
 r'$f$',\
-r'$f_{\rm NL}$'\
+#r'$f_{\rm NL}$'\
 ]
 
 #F = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
 ells = [0]
-F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
-
+#F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+#np.save('data/FishMatexample',F)
+F = np.load('data/FishMatexample.npy')
+print(F)
 C = np.linalg.inv(F)
+print(C)
+
+ells = [0,2]
+#F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+#np.save('data/FishMatexample2',F02)
+F02 = np.load('data/FishMatexample2.npy')
+print(F02)
+C02 = np.linalg.inv(F02)
+print(C02)
+
+ells = [0,2,4]
+#F024 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+#np.save('data/FishMatexample24',F024)
+F024 = np.load('data/FishMatexample24.npy')
+print(F024)
+C024 = np.linalg.inv(F024)
+print(C024)
+
+F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+
+theta = model.get_param_vals(theta_ids,z,cosmopars)
+
+fisher.CornerPlot([F,F02,F024,F2d],theta,theta_ids)
+plt.show()
+exit()
+
+
 Npar = np.shape(C)[0]
 R = np.zeros((Npar,Npar)) # correlation matrix
 for i in range(Npar):
@@ -65,9 +94,5 @@ for i in range(Npar):
 plt.figure()
 plt.imshow(R,vmin=-1,vmax=1,cmap='bwr_r')
 plt.colorbar()
-
-theta = model.get_param_vals(theta_ids,z,cosmopars)
-
-fisher.CornerPlot(F,theta,theta_ids)
 plt.show()
 exit()

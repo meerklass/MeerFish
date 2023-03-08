@@ -94,7 +94,7 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
                     if theta_ids[j]==r'$f_{\rm NL}$': return dPell_dtheta(ell,k,dlnP_dfNL)
                 for ell0 in ells:
                     for ell1 in ells:
-                        if ell1<ell0: continue # avoid double counting multipole permutations e.g. ell=0,ell=1 == ell=1,ell=0
+                        #if ell1<ell0: continue # avoid double counting multipole permutations e.g. ell=0,ell=1 == ell=1,ell=0
                         print(theta_ids[i],theta_ids[j],ell0,ell1)
                         dFk = k**2 * deriv_i(ell0,k) * Cov_ell(ell0,ell1,k)**(-1) * deriv_j(ell1,k)
                         F[i,j] += scipy.integrate.simps(dFk, k) # integrate over k and sum all mutlipole permutations
@@ -111,9 +111,8 @@ def Cov_ell(ell0,ell1,k):
         C[i] = (2*ell0+1)*(2*ell1+1) * scipy.integrate.quad(integrand, 0, 1)[0]
     return C
 
-def ContourEllipse(F,x,y):
-    ''' Calculate ellipses using Eq2 and 4 from https://arxiv.org/pdf/0906.4123.pdf
-           with inputs from Phil Bull's Fisher repo https://gitlab.com/radio-fisher/bao21cm/-/blob/master/radiofisher/baofisher.py'''
+def ContourEllipse(F,x,y,theta):
+    ''' Calculate ellipses using Eq2 and 4 from https://arxiv.org/pdf/0906.4123.pdf'''
     # F: input Fisher matrix
     # (x,y): chosen indices for parameter pair in Fisher matrix to compute elipse for
     C = np.linalg.inv(F)
@@ -124,32 +123,41 @@ def ContourEllipse(F,x,y):
     # Flip major/minor axis depending on which parameter is dominant
     if Cxx >= Cyy: w = 2*a; h = 2*b
     else: w = 2*b; h = 2*a
-    ang = np.degrees( 0.5*np.arctan( 2*Cxy / (Cxx - Cyy) ) )
-    return w,h,ang
+    ang = 0.5*np.arctan( 2*Cxy / (Cxx - Cyy) )
+    ### Create ellipse equation line for plotting
+    phi = np.linspace(0, 2*np.pi, 100) # angle variables
+    Ellps = np.array([w*np.cos(phi) , h*np.sin(phi)]) # Ellipse equation
+    # Construct 2D rotation matrix for ellipse:
+    R_rot = np.array([[np.cos(ang) , -np.sin(ang)],[np.sin(ang) , np.cos(ang)]])
+    Ellps_rot = np.zeros((2,Ellps.shape[1]))
+    for i in range(Ellps.shape[1]):
+        Ellps_rot[:,i] = np.dot(R_rot,Ellps[:,i])
+    return theta[y]+Ellps_rot[1,:],theta[x]+Ellps_rot[0,:] # return reversed for matplotlib (j,i) panel convention
 
-def CornerPlot(F,theta,theta_labels):
-    Npar = np.shape(F)[0]
-    C = np.linalg.inv(F)
+def CornerPlot(Fs,theta,theta_labels):
+    if len(np.shape(Fs))==2: Fs = [Fs] # just one matrix provided.
+    Npar = np.shape(Fs[0])[0]
     fig = plt.figure(figsize=(8,8))
     gs = GridSpec(Npar,Npar) # rows,columns
     for i in range(Npar):
         for j in range(Npar):
-            if j>i: continue
+            if j>i: continue # only plot one corner of panels
             ax = fig.add_subplot(gs[i,j]) # First row, first column
-            if i==(Npar-1): ax.set_xlabel(theta_labels[j])
-            if j==0: ax.set_ylabel(theta_labels[i])
-            if i==j: # Plot Gaussian distribution for marginalised parameter estimate
-                sigma = np.sqrt(C[i,i])
-                gauss_dummy = np.linspace(theta[i]-4*sigma, theta[i]+4*sigma, 100)
-                ax.plot(gauss_dummy, stats.norm.pdf(gauss_dummy, theta[i], sigma),color='tab:blue')
-                ax.set_ylim(bottom=0)
-                ax.set_yticks([])
-                if theta[i]==0: title = theta_labels[i]+r'$=0\pm%s$'%np.round(sigma,3)
-                else: title = r'$\sigma($'+theta_labels[i]+r'$)/$'+theta_labels[i]+r'$=%s$'%(np.round(100*sigma/theta[i],3))+'%'
-                ax.set_title(title)
-                continue
-            w,h,ang = ContourEllipse(F,j,i) # (j,i) reversed because panelling lower corner
-            ellipse = Ellipse(xy=(theta[j],theta[i]), width=w, height=h, angle=ang, edgecolor='tab:blue', fc='none', lw=2)
-            ax.add_patch(ellipse)
-            ax.autoscale()
-    return
+            for F in Fs:
+                C = np.linalg.inv(F)
+                if i==(Npar-1): ax.set_xlabel(theta_labels[j])
+                if j==0: ax.set_ylabel(theta_labels[i])
+                if i==j: # Plot Gaussian distribution for marginalised parameter estimate
+                    sigma = np.sqrt(C[i,i])
+                    xi = np.linspace(theta[i]-5*sigma, theta[i]+5*sigma, 200)
+                    gauss = stats.norm.pdf(xi, theta[i], sigma)
+                    gauss /= np.max(gauss) # normalise so max =1
+                    ax.plot(xi,gauss)
+                    ax.set_ylim(bottom=0)
+                    ax.set_yticks([])
+                    if theta[i]==0: title = theta_labels[i]+r'$=0\pm%s$'%np.round(sigma,3)
+                    else: title = r'$\sigma($'+theta_labels[i]+r'$)/$'+theta_labels[i]+r'$=%s$'%(np.round(100*sigma/theta[i],3))+'%'
+                    ax.set_title(title)
+                    continue
+                ell_x,ell_y = ContourEllipse(F,i,j,theta)
+                ax.plot(ell_x,ell_y)
