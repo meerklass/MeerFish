@@ -4,6 +4,7 @@ import scipy
 from scipy import integrate
 from scipy import linalg
 import scipy.stats as stats
+from scipy.special import legendre as Leg
 from matplotlib.patches import Ellipse
 from matplotlib.gridspec import GridSpec
 import model
@@ -20,16 +21,6 @@ def dlnP_df(k,mu):
     return 2*mu**2 / (b_HI + f*mu**2)
 def dlnP_dfNL(k,mu):
     return 2*bphiHI*cosmo.M(k,z)**(-1) / (b_HI + f*mu**2)
-
-def dPell_dtheta(ell,k,derivfunc):
-    '''Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
-        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
-    integrand = lambda mu: derivfunc(k_i,mu) * model.P_HI(k_i,mu,z,Pmod,cosmopars,surveypars) * model.L(ell,mu)
-    res = np.zeros(len(k))
-    for i in range(len(k)):
-        k_i = k[i]
-        res[i] = (2*ell+1) * scipy.integrate.quad(integrand, 0, 1)[0]
-    return res
 
 def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
     '''Compute full 2D anisotroic Fisher matrix for parameter set [theta]'''
@@ -75,41 +66,59 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
     global Omega_HI,b_HI,f,bphiHI,f_NL,M
     Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
 
+    dk = np.diff(k)
+    if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
+         print('\nError! - k-bins must be linearly spaced.'); exit()
+    dk = np.mean(dk) # reduce array to a single number
     Npar = len(theta_ids)
     F = np.zeros((Npar,Npar))
     global deriv_i; global deriv_j
-
+    nell = len(ells)
     for i in range(Npar):
-        def deriv_i(ell,k):
-            if theta_ids[i]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ell,k,dlnP_dTbar)
-            if theta_ids[i]==r'$b_{\rm HI}$': return dPell_dtheta(ell,k,dlnP_dbHI)
-            if theta_ids[i]==r'$f$': return dPell_dtheta(ell,k,dlnP_df)
-            if theta_ids[i]==r'$f_{\rm NL}$': return dPell_dtheta(ell,k,dlnP_dfNL)
+        def deriv_i(k):
+            if theta_ids[i]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dTbar)
+            if theta_ids[i]==r'$b_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dbHI)
+            if theta_ids[i]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
+            if theta_ids[i]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
         for j in range(Npar):
             if j>=i: # avoid calculating symmetric off-diagonals twice
-                def deriv_j(ell,k):
-                    if theta_ids[j]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ell,k,dlnP_dTbar)
-                    if theta_ids[j]==r'$b_{\rm HI}$': return dPell_dtheta(ell,k,dlnP_dbHI)
-                    if theta_ids[j]==r'$f$': return dPell_dtheta(ell,k,dlnP_df)
-                    if theta_ids[j]==r'$f_{\rm NL}$': return dPell_dtheta(ell,k,dlnP_dfNL)
-                for ell0 in ells:
-                    for ell1 in ells:
-                        #if ell1<ell0: continue # avoid double counting multipole permutations e.g. ell=0,ell=1 == ell=1,ell=0
-                        print(theta_ids[i],theta_ids[j],ell0,ell1)
-                        dFk = k**2 * deriv_i(ell0,k) * Cov_ell(ell0,ell1,k)**(-1) * deriv_j(ell1,k)
-                        F[i,j] += scipy.integrate.simps(dFk, k) # integrate over k and sum all mutlipole permutations
+                def deriv_j(k):
+                    if theta_ids[j]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dTbar)
+                    if theta_ids[j]==r'$b_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dbHI)
+                    if theta_ids[j]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
+                    if theta_ids[j]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
+                Cinv = np.linalg.inv( Cov_ell(ells,k,z,Pmod,cosmopars,surveypars) )
+                # Sum over ell and integrate over k in one big matrix operation:
+                F[i,j] = dk * np.dot( np.dot( np.tile(k,nell)*deriv_i(k),Cinv ) , np.tile(k,nell)*deriv_j(k) )
             else: F[i,j] = F[j,i]
     F *= V_bin/(4*np.pi**2)
     return F
 
-def Cov_ell(ell0,ell1,k):
-    ''' Covariance matrix for multipoles '''
-    integrand = lambda mu: model.L(ell0,mu)*model.L(ell1,mu) * model.P_HI_obs(k_i,mu,z,Pmod,cosmopars,surveypars)**2
-    C = np.zeros(len(k))
-    for i in range(len(k)):
-        k_i = k[i]
-        C[i] = (2*ell0+1)*(2*ell1+1) * scipy.integrate.quad(integrand, 0, 1)[0]
+def Cov_ell(ells,k,z,Pmod,cosmopars,surveypars):
+    ''' (n_ell * nk) X (n_ell * nk) covariance matrix for multipoles where each
+    element integrates over mu '''
+    nell,nk = len(ells),len(k)
+    integrand = lambda mu: (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mu)*Leg(ell_j)(mu) * model.P_HI_obs(k_i,mu,z,Pmod,cosmopars,surveypars)**2
+    C = np.zeros((nell*nk,nell*nk))
+    for i,ell_i in enumerate(ells):
+        for j,ell_j in enumerate(ells):
+            # Calculating k's along diagonal of each multipole permutation in C
+            C_diag = np.zeros(nk) # 1D diagonal array to place into broader C matrix
+            for ki,k_i in enumerate(k):
+                C_diag[ki] = scipy.integrate.quad(integrand, 0, 1)[0]
+            C[i*nk:i*nk+nk,j*nk:j*nk+nk] = np.identity(nk) * C_diag # bed 1D array along diagonal of multipole permutation in C
     return C
+
+def dPell_dtheta(ells,k,derivfunc):
+    '''Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
+        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
+    nell,nk = len(ells),len(k)
+    integrand = lambda mu: (2*ell_i+1) * derivfunc(k_i,mu) * model.P_HI(k_i,mu,z,Pmod,cosmopars,surveypars) * Leg(ell_i)(mu)
+    res = np.zeros(nell*nk)
+    for i,ell_i in enumerate(ells):
+        for ki,k_i in enumerate(k):
+            res[ki + i*nk] = scipy.integrate.quad(integrand, 0, 1)[0]
+    return res
 
 def ContourEllipse(F,x,y,theta):
     ''' Calculate ellipses using Eq2 and 4 from https://arxiv.org/pdf/0906.4123.pdf'''
@@ -134,16 +143,31 @@ def ContourEllipse(F,x,y,theta):
         Ellps_rot[:,i] = np.dot(R_rot,Ellps[:,i])
     return theta[y]+Ellps_rot[1,:],theta[x]+Ellps_rot[0,:] # return reversed for matplotlib (j,i) panel convention
 
-def CornerPlot(Fs,theta,theta_labels):
+def CornerPlot(Fs,theta,theta_labels,Flabels):
     if len(np.shape(Fs))==2: Fs = [Fs] # just one matrix provided.
     Npar = np.shape(Fs[0])[0]
     fig = plt.figure(figsize=(8,8))
     gs = GridSpec(Npar,Npar) # rows,columns
+    theta_max = np.zeros(Npar)
+    theta_min = np.zeros(Npar)
+
+    '''
+    ell_x = np.zeros((Npar,Npar,len(Fs)))
+    ell_y = np.zeros((Npar,Npar,len(Fs)))
+    ### Calculate all contours first for minima and maxima of each panel:
+    for i in range(Npar):
+        for j in range(Npar):
+            if j>i: continue # only plot one corner of panels
+            for Fi in range(len(Fs)):
+                if i==j: continue # no contour on diagonal
+                ell_x[i,j,Fi],ell_y[i,j,Fi] = ContourEllipse(Fs[Fi],i,j,theta)
+    '''
     for i in range(Npar):
         for j in range(Npar):
             if j>i: continue # only plot one corner of panels
             ax = fig.add_subplot(gs[i,j]) # First row, first column
-            for F in Fs:
+            for Fi in range(len(Fs)):
+                F = Fs[Fi]
                 C = np.linalg.inv(F)
                 if i==(Npar-1): ax.set_xlabel(theta_labels[j])
                 if j==0: ax.set_ylabel(theta_labels[i])
@@ -152,12 +176,20 @@ def CornerPlot(Fs,theta,theta_labels):
                     xi = np.linspace(theta[i]-5*sigma, theta[i]+5*sigma, 200)
                     gauss = stats.norm.pdf(xi, theta[i], sigma)
                     gauss /= np.max(gauss) # normalise so max =1
-                    ax.plot(xi,gauss)
+                    ax.plot(xi,gauss,label=Flabels[Fi])
                     ax.set_ylim(bottom=0)
                     ax.set_yticks([])
                     if theta[i]==0: title = theta_labels[i]+r'$=0\pm%s$'%np.round(sigma,3)
                     else: title = r'$\sigma($'+theta_labels[i]+r'$)/$'+theta_labels[i]+r'$=%s$'%(np.round(100*sigma/theta[i],3))+'%'
                     ax.set_title(title)
+                    if Fi==(len(Fs)-1):
+                        if i==0: ax.legend(Flabels,bbox_to_anchor=[1.2,1],fontsize=14,frameon=False,loc='upper left')
+                        ax.axvline(theta[i],color='grey',lw=0.5,zorder=-1)
                     continue
+
                 ell_x,ell_y = ContourEllipse(F,i,j,theta)
                 ax.plot(ell_x,ell_y)
+
+                ax.axvline(theta[j],color='grey',lw=0.5,zorder=-1)
+                ax.axhline(theta[i],color='grey',lw=0.5,zorder=-1)
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)

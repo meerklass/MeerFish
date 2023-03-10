@@ -2,6 +2,7 @@ import numpy as np
 import cosmo
 import scipy
 from scipy import integrate
+from scipy.special import legendre as Leg
 v_21cm = 1420.405751#MHz
 
 def Red2Freq(z):
@@ -116,14 +117,9 @@ def P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars):
 
 def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars):
     '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
-    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars) * L(ell,mu)
+    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars) * Leg(ell)(mu)
     Pk = np.zeros(len(k))
     for i in range(len(k)):
         k_i = k[i]
         Pk[i] = scipy.integrate.quad(Pkmu, 0, 1)[0]
     return Pk
-
-def L(ell,mu):
-    if ell==0: return 1
-    if ell==2: return (3*mu**2 - 1)/2
-    if ell==4: return (35*mu**4 - 30*mu**2 + 3)/8
