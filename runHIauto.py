@@ -25,10 +25,12 @@ Omega_HI = model.OmegaHI(z)
 Tbar = model.Tbar(z,Omega_HI)
 b_HI = model.b_HI(z)
 f = cosmo.f(z)
+D_A = cosmo.D_A(z)
+H = cosmo.H(z)
 bphiHI = cosmo.b_phi_universality(b_HI)
 f_NL = 0
 
-cosmopars = [Omega_HI,b_HI,f,bphiHI,f_NL]
+cosmopars = [Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL]
 surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish]
 
 ### 2D model power check:
@@ -52,13 +54,22 @@ plt.axhline(Tbar**2*model.P_SN(z),color='black',label=r'$\overline{T}_{\rm HI}^2
 plt.legend(frameon=False,ncol=3,loc='lower center',bbox_to_anchor=[0.5,0.98])
 plt.loglog()
 plt.figure()
+#exit()
 
 theta_ids = [\
 #r'$\overline{T}_{\rm HI}$',\
 r'$b_{\rm HI}$',\
 r'$f$',\
+r'$D_A$',\
+r'$H$',\
 r'$f_{\rm NL}$'\
 ]
+theta = model.get_param_vals(theta_ids,z,cosmopars)
+
+F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+fisher.CornerPlot(F2d,theta,theta_ids)
+plt.show()
+exit()
 
 ### Plot covariance matrix for k-bins and all multipole permutations:
 '''
@@ -80,41 +91,53 @@ plt.figure()
 #exit()
 '''
 
-#ells = [0]
+ells = [0]
 #F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample0',F)
 F0 = np.load('data/FishMatexample0.npy')
 C0 = np.linalg.inv(F0)
 
-#ells = [2]
+ells = [2]
 #F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample2',F)
 F2 = np.load('data/FishMatexample2.npy')
 C2 = np.linalg.inv(F2)
 
-#ells = [0,2]
+ells = [0,2]
 #F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample02',F02)
 F02 = np.load('data/FishMatexample02.npy')
 C02 = np.linalg.inv(F02)
 
-#ells = [0,2,4]
+ells = [0,2,4]
 #F024 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample024',F024)
 F024 = np.load('data/FishMatexample024.npy')
 C024 = np.linalg.inv(F024)
 
-F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
-
-theta = model.get_param_vals(theta_ids,z,cosmopars)
-
 #Fs = [F0,F02,F2d]
+#Fs = [F0,F2,F02,F024,F2d]
 Fs = [F0,F02,F024,F2d]
 
 #Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_{\rm 2D}$']
 #Flabels = [r'$P_0$',r'$P_2$',r'$P_0 + P_2$',r'$P_{\rm 2D}$']
+#Flabels = [r'$P_0$',r'$P_2$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$',r'$P_{\rm 2D}$']
 Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$',r'$P_{\rm 2D}$']
 fisher.CornerPlot(Fs,theta,theta_ids,Flabels)
+plt.show()
+exit()
+
+### Try including Tbar:
+theta_ids = [\
+r'$\overline{T}_{\rm HI}$',\
+r'$b_{\rm HI}$',\
+r'$f$',\
+r'$f_{\rm NL}$'\
+]
+F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+theta = model.get_param_vals(theta_ids,z,cosmopars)
+
+fisher.CornerPlot(F2d,theta,theta_ids)
 plt.show()
 exit()
 

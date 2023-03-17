@@ -15,21 +15,30 @@ def params(Survey):
         t_tot = 5 # observation hours
         N_dish = 60 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
-    if Survey=='MK_UHF': # MeerKLASS UHF-band
-        zmin,zmax = 0.4,1.4
+    elif Survey=='MK_LB': # MeerKLASS UHF-band
+        zmin,zmax = 0.2,0.58
         A_sky = 4000 # area in sq.deg
         t_tot = 4000 # observation hours
         N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
-    if Survey=='SKA': # SKA Band 1
+    elif Survey=='MK_UHF': # MeerKLASS UHF-band
+        zmin,zmax = 0.4,1.4
+        #zmin,zmax = 0.6,0.7
+        A_sky = 4000 # area in sq.deg
+        t_tot = 4000 # observation hours
+        #A_sky = 10000
+        #t_tot = 1250
+        N_dish = 64 # number of dishes
+        D_dish = 13.5 # diameter of dish [metres]
+    elif Survey=='SKA': # SKA Band 1
         zmin,zmax = 0.35,3
         A_sky = 20000 # area in sq.deg
         t_tot = 10000 # observation hours
         N_dish = 197 # number of dishes
         D_dish = 15 # diameter of dish [metres]
-
+    else: print('\n ERROR: Invalid survey selection: %s \n'%Survey); exit()
     ### Set cosmology:
-    z = (zmax - zmin)/2 # central redshift
+    z = np.mean([zmin,zmax]) # central redshift
     cosmo.SetCosmology(z=z)
     R_beam = BeamPars(D_dish,z)[1]
     V_bin = Vsur(zmin,zmax,A_sky)

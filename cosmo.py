@@ -84,6 +84,9 @@ def D_com(z):
         h = cosmo.H(0).value/100 # use to convert astopy Mpc distances to Mpc/h
         return cosmo.comoving_distance(z).value*h
 
+def D_A(z):
+    return D_com(z) / (1+z)
+
 def Deltab(z,k,f_NL,b_HI):
     #Scale dependent modification of the Gaussian clustering bias
     # Eq 13 of https://arxiv.org/pdf/1507.03550.pdf

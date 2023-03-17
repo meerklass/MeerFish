@@ -15,13 +15,15 @@ def Freq2Red(v):
 
 def get_param_vals(ids,z,cosmopars):
     ''' return model values for parameter strings '''
-    Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
+    Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL = cosmopars
     vals=[]
     Npar = len(ids)
     for i in range(Npar):
         if ids[i]==r'$\overline{T}_{\rm HI}$': vals.append( Tbar(z,Omega_HI) )
         if ids[i]==r'$b_{\rm HI}$': vals.append( b_HI )
         if ids[i]==r'$f$': vals.append( f )
+        if ids[i]==r'$D_A$': vals.append( D_A )
+        if ids[i]==r'$H$': vals.append( H )
         if ids[i]==r'$f_{\rm NL}$': vals.append( 0 )
     return np.array(vals)
 
@@ -95,17 +97,22 @@ def B_beam(mu,k,R_beam):
     if R_beam==0: return 1
     return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
 
-def P_HI(k,mu,z,Pmod,cosmopars,surveypars):
+def P_HI(k_f,mu_f,z,Pmod,cosmopars,surveypars):
     ''' 2D signal model for power spectrum '''
-    Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
+    ### _f subscripts mark the "measured" parameters based on fiducial cosmology assumed
+    Omega_HI,b_HI,f,D_A_f,H_f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
+    a_perp, a_para = cosmo.D_A(z)/D_A_f , H_f / cosmo.H(z) # alpha AP parameters
+    F_AP = a_para/a_perp
+    k = k_f/a_perp * np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
+    mu = mu_f/F_AP / np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
+    return 1/a_para*1/a_perp**2 * Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
 
-def P_HI_obs(k,mu,z,Pmod,cosmopars,surveypars):
+def P_HI_obs(k_f,mu_f,z,Pmod,cosmopars,surveypars):
     ''' 2D observational power spectrum with noise components'''
-    Omega_HI,b_HI,f,bphiHI,f_NL = cosmopars
+    Omega_HI,b_HI,f,D_A_f,H_f,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
-    return P_HI(k,mu,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu,k,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+    return P_HI(k_f,mu_f,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu_f,k_f,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
 
 def P_HI_ell(ell,k,z,Pmod,cosmopars,surveypars):
     ''' Integrate sigma model over mu into multipole ell '''
