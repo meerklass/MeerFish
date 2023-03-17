@@ -124,9 +124,8 @@ def P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars):
 
 def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars):
     '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
-    Pkmu = lambda mu: Pfunc(k_i,mu,z,Pmod,cosmopars,surveypars) * Leg(ell)(mu)
-    Pk = np.zeros(len(k))
-    for i in range(len(k)):
-        k_i = k[i]
-        Pk[i] = scipy.integrate.quad(Pkmu, 0, 1)[0]
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars) * Leg(ell)(mugrid)
+    Pk = scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
     return Pk

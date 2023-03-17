@@ -48,6 +48,18 @@ def dlnP_dH(k,mu):
     return 8*(np.log(model.P_HI(k,mu,z,Pmod,pp,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,pm,surveypars)) ) / (12*epsilon*H) \
     - (np.log(model.P_HI(k,mu,z,Pmod,p2p,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,p2m,surveypars)) ) / (12*epsilon*H)
 
+def dPell_dtheta(ells,k,derivfunc):
+    '''Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
+        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
+    nell,nk = len(ells),len(k)
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    res = np.zeros((nell,nk))
+    for i,ell_i in enumerate(ells):
+        integrand = (2*ell_i+1) * derivfunc(kgrid,mugrid) * model.P_HI(kgrid,mugrid,z,Pmod,cosmopars,surveypars) * Leg(ell_i)(mugrid)
+        res[i] = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
+    return np.ravel(res)
+
 def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
     '''Compute full 2D anisotroic Fisher matrix for parameter set [theta]'''
 
@@ -99,7 +111,7 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
     global V_bin,z,Pmod,cosmopars,surveypars
     V_bin=V_bin_; z=z_; Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
 
-    global Omega_HI,b_HI,f,bphiHI,f_NL
+    global Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL
     Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL = cosmopars
 
     dk = np.diff(k)
@@ -115,6 +127,8 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
             if theta_ids[i]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dTbar)
             if theta_ids[i]==r'$b_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dbHI)
             if theta_ids[i]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
+            if theta_ids[i]==r'$D_A$': return dPell_dtheta(ells,k,dlnP_dD_A)
+            if theta_ids[i]==r'$H$': return dPell_dtheta(ells,k,dlnP_dH)
             if theta_ids[i]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
         for j in range(Npar):
             if j>=i: # avoid calculating symmetric off-diagonals twice
@@ -122,6 +136,8 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
                     if theta_ids[j]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dTbar)
                     if theta_ids[j]==r'$b_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dbHI)
                     if theta_ids[j]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
+                    if theta_ids[j]==r'$D_A$': return dPell_dtheta(ells,k,dlnP_dD_A)
+                    if theta_ids[j]==r'$H$': return dPell_dtheta(ells,k,dlnP_dH)
                     if theta_ids[j]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
                 Cinv = np.linalg.inv( Cov_ell(ells,k,z,Pmod,cosmopars,surveypars) )
                 # Sum over ell and integrate over k in one big matrix operation:
@@ -134,27 +150,17 @@ def Cov_ell(ells,k,z,Pmod,cosmopars,surveypars):
     ''' (n_ell * nk) X (n_ell * nk) covariance matrix for multipoles where each
     element integrates over mu '''
     nell,nk = len(ells),len(k)
-    integrand = lambda mu: (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mu)*Leg(ell_j)(mu) * model.P_HI_obs(k_i,mu,z,Pmod,cosmopars,surveypars)**2
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
     C = np.zeros((nell*nk,nell*nk))
     for i,ell_i in enumerate(ells):
         for j,ell_j in enumerate(ells):
+            integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_HI_obs(kgrid,mugrid,z,Pmod,cosmopars,surveypars)**2
             # Calculating k's along diagonal of each multipole permutation in C
-            C_diag = np.zeros(nk) # 1D diagonal array to place into broader C matrix
-            for ki,k_i in enumerate(k):
-                C_diag[ki] = scipy.integrate.quad(integrand, 0, 1)[0]
+            #  - first compute 1D diagonal array "C_diag" to place into broader C matrix:
+            C_diag = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
             C[i*nk:i*nk+nk,j*nk:j*nk+nk] = np.identity(nk) * C_diag # bed 1D array along diagonal of multipole permutation in C
     return C
-
-def dPell_dtheta(ells,k,derivfunc):
-    '''Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
-        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
-    nell,nk = len(ells),len(k)
-    integrand = lambda mu: (2*ell_i+1) * derivfunc(k_i,mu) * model.P_HI(k_i,mu,z,Pmod,cosmopars,surveypars) * Leg(ell_i)(mu)
-    res = np.zeros(nell*nk)
-    for i,ell_i in enumerate(ells):
-        for ki,k_i in enumerate(k):
-            res[ki + i*nk] = scipy.integrate.quad(integrand, 0, 1)[0]
-    return res
 
 def ContourEllipse(F,x,y,theta):
     ''' Calculate ellipses using Eq2 and 4 from https://arxiv.org/pdf/0906.4123.pdf'''

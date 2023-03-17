@@ -56,6 +56,7 @@ plt.loglog()
 plt.figure()
 #exit()
 
+
 theta_ids = [\
 #r'$\overline{T}_{\rm HI}$',\
 r'$b_{\rm HI}$',\
@@ -66,10 +67,12 @@ r'$f_{\rm NL}$'\
 ]
 theta = model.get_param_vals(theta_ids,z,cosmopars)
 
+'''
 F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
 fisher.CornerPlot(F2d,theta,theta_ids)
 plt.show()
 exit()
+'''
 
 ### Plot covariance matrix for k-bins and all multipole permutations:
 '''
@@ -92,56 +95,42 @@ plt.figure()
 '''
 
 ells = [0]
-#F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
-#np.save('data/FishMatexample0',F)
-F0 = np.load('data/FishMatexample0.npy')
-C0 = np.linalg.inv(F0)
+F0 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+#np.save('data/FishMatexample0',F0)
+#F0 = np.load('data/FishMatexample0.npy')
 
 ells = [2]
-#F = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
-#np.save('data/FishMatexample2',F)
-F2 = np.load('data/FishMatexample2.npy')
-C2 = np.linalg.inv(F2)
+#F2 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+#np.save('data/FishMatexample2',F2)
+#F2 = np.load('data/FishMatexample2.npy')
 
 ells = [0,2]
-#F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample02',F02)
-F02 = np.load('data/FishMatexample02.npy')
-C02 = np.linalg.inv(F02)
+#F02 = np.load('data/FishMatexample02.npy')
 
 ells = [0,2,4]
 #F024 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample024',F024)
-F024 = np.load('data/FishMatexample024.npy')
-C024 = np.linalg.inv(F024)
+#F024 = np.load('data/FishMatexample024.npy')
 
-#Fs = [F0,F02,F2d]
+F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
+
+Fs = [F0,F02,F2d]
 #Fs = [F0,F2,F02,F024,F2d]
-Fs = [F0,F02,F024,F2d]
+#Fs = [F0,F02,F024,F2d]
+#Fs = [F0,F2d]
 
-#Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_{\rm 2D}$']
+Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_{\rm 2D}$']
 #Flabels = [r'$P_0$',r'$P_2$',r'$P_0 + P_2$',r'$P_{\rm 2D}$']
 #Flabels = [r'$P_0$',r'$P_2$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$',r'$P_{\rm 2D}$']
-Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$',r'$P_{\rm 2D}$']
+#Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$',r'$P_{\rm 2D}$']
+#Flabels = [r'$P_0$',r'$P_{\rm 2D}$']
 fisher.CornerPlot(Fs,theta,theta_ids,Flabels)
 plt.show()
 exit()
 
-### Try including Tbar:
-theta_ids = [\
-r'$\overline{T}_{\rm HI}$',\
-r'$b_{\rm HI}$',\
-r'$f$',\
-r'$f_{\rm NL}$'\
-]
-F2d = fisher.Matrix_2D(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin)
-theta = model.get_param_vals(theta_ids,z,cosmopars)
-
-fisher.CornerPlot(F2d,theta,theta_ids)
-plt.show()
-exit()
-
-
+### Correlation matrices between parameters:
 Npar = np.shape(C)[0]
 R = np.zeros((Npar,Npar)) # correlation matrix
 for i in range(Npar):
