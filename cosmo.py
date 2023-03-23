@@ -152,4 +152,4 @@ def MatterPk(z,kmin=1e-3,kmax=10,NonLinear=False):
     transfer_func = transfer_func/np.max(transfer_func)
     global T
     T = interp1d(k_trans, transfer_func) # Transfer function - set to global variable
-    return interp1d(k, pk[0])
+    return interp1d(k,pk[0],kind='cubic')

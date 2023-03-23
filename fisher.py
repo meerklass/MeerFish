@@ -21,6 +21,9 @@ def dlnP_dbHI(k,mu):
 def dlnP_df(k,mu):
     return 2*mu**2 / (b_HI + f*mu**2)
 #'''
+def dlnP_dA(k,mu):
+    return f_BAO/(1+A*f_BAO)
+
 def dlnP_dfNL(k,mu):
     return 2*bphiHI*cosmo.M(k,z)**(-1) / (b_HI + f*mu**2)
 
@@ -34,17 +37,17 @@ def dlnP_df(k,mu):
     return ( np.log(model.P_HI(k,mu,z,Pmod,cosmopars_plustep,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,cosmopars_substep,surveypars)) ) / (2*epsilon*f)
 '''
 def dlnP_dD_A(k,mu):
-    pp = [Omega_HI,b_HI,f,D_A*(1+epsilon),H,bphiHI,f_NL]
-    pm = [Omega_HI,b_HI,f,D_A*(1-epsilon),H,bphiHI,f_NL]
-    p2p = [Omega_HI,b_HI,f,D_A*(1+2*epsilon),H,bphiHI,f_NL]
-    p2m = [Omega_HI,b_HI,f,D_A*(1-2*epsilon),H,bphiHI,f_NL]
+    pp = [Omega_HI,b_HI,f,D_A*(1+epsilon),H,A,bphiHI,f_NL]
+    pm = [Omega_HI,b_HI,f,D_A*(1-epsilon),H,A,bphiHI,f_NL]
+    p2p = [Omega_HI,b_HI,f,D_A*(1+2*epsilon),H,A,bphiHI,f_NL]
+    p2m = [Omega_HI,b_HI,f,D_A*(1-2*epsilon),H,A,bphiHI,f_NL]
     return 8*(np.log(model.P_HI(k,mu,z,Pmod,pp,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,pm,surveypars)) ) / (12*epsilon*D_A) \
     - (np.log(model.P_HI(k,mu,z,Pmod,p2p,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,p2m,surveypars)) ) / (12*epsilon*D_A)
 def dlnP_dH(k,mu):
-    pp = [Omega_HI,b_HI,f,D_A,H*(1+epsilon),bphiHI,f_NL]
-    pm = [Omega_HI,b_HI,f,D_A,H*(1-epsilon),bphiHI,f_NL]
-    p2p = [Omega_HI,b_HI,f,D_A,H*(1+2*epsilon),bphiHI,f_NL]
-    p2m = [Omega_HI,b_HI,f,D_A,H*(1-2*epsilon),bphiHI,f_NL]
+    pp = [Omega_HI,b_HI,f,D_A,H*(1+epsilon),A,bphiHI,f_NL]
+    pm = [Omega_HI,b_HI,f,D_A,H*(1-epsilon),A,bphiHI,f_NL]
+    p2p = [Omega_HI,b_HI,f,D_A,H*(1+2*epsilon),A,bphiHI,f_NL]
+    p2m = [Omega_HI,b_HI,f,D_A,H*(1-2*epsilon),A,bphiHI,f_NL]
     return 8*(np.log(model.P_HI(k,mu,z,Pmod,pp,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,pm,surveypars)) ) / (12*epsilon*H) \
     - (np.log(model.P_HI(k,mu,z,Pmod,p2p,surveypars)) - np.log(model.P_HI(k,mu,z,Pmod,p2m,surveypars)) ) / (12*epsilon*H)
 
@@ -56,6 +59,11 @@ def dPell_dtheta(ells,k,derivfunc):
     kgrid,mugrid = np.meshgrid(k,mu)
     res = np.zeros((nell,nk))
     for i,ell_i in enumerate(ells):
+
+        if derivfunc is dlnP_dA:
+            global f_BAO
+            f_BAO = f_BAO_ell[i]
+
         integrand = (2*ell_i+1) * derivfunc(kgrid,mugrid) * model.P_HI(kgrid,mugrid,z,Pmod,cosmopars,surveypars) * Leg(ell_i)(mugrid)
         res[i] = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
     return np.ravel(res)
@@ -66,8 +74,8 @@ def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
     global V_bin,z,Pmod,cosmopars,surveypars
     V_bin=V_bin_; z=z_; Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
 
-    global Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL
-    Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL = cosmopars
+    global Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL
+    Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL = cosmopars
 
     ### define mu and k bins and their spacing:
     mu = np.linspace(0,1,1000)
@@ -77,6 +85,10 @@ def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
          print('\nError! - k-bins must be linearly spaced.'); exit()
     dk = np.mean(dk) # reduce array to a single number
     dmu = np.diff(mu)[0]
+
+    ########################################################
+    #### CAN V_eff be moved outside loop ???? #######
+    ########################################################
 
     Npar = len(theta_ids)
     F = np.zeros((Npar,Npar))
@@ -89,6 +101,7 @@ def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
             #if theta_ids[i]==r'$f$': return dlnP_dlnf(k_i,mu_i)
             if theta_ids[i]==r'$D_A$': return dlnP_dD_A(k_i,mu_i)
             if theta_ids[i]==r'$H$': return dlnP_dH(k_i,mu_i)
+            if theta_ids[i]==r'$A$': return 1 # cannot spline fit for 2DPk
             if theta_ids[i]==r'$f_{\rm NL}$': return dlnP_dfNL(k_i,mu_i)
         for j in range(Npar):
             if j>=i: # avoid calculating symmetric off-diagonals twice
@@ -99,6 +112,7 @@ def Matrix_2D(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_):
                     #if theta_ids[j]==r'$f$': return dlnP_dlnf(k_i,mu_i)
                     if theta_ids[j]==r'$D_A$': return dlnP_dD_A(k_i,mu_i)
                     if theta_ids[j]==r'$H$': return dlnP_dH(k_i,mu_i)
+                    if theta_ids[j]==r'$A$': return 1 # cannot spline fit for 2DPk
                     if theta_ids[j]==r'$f_{\rm NL}$': return dlnP_dfNL(k_i,mu_i)
                 dFkmu = kgrid**2*deriv_i(kgrid,mugrid)*deriv_j(kgrid,mugrid)*V_eff(kgrid,mugrid)
                 F[i,j] = 1/(4*np.pi**2) * dk*dmu * np.sum(dFkmu) # integrate (sum) over k and mu
@@ -111,8 +125,14 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
     global V_bin,z,Pmod,cosmopars,surveypars
     V_bin=V_bin_; z=z_; Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
 
-    global Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL
-    Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL = cosmopars
+    global Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL
+    Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL = cosmopars
+
+    nell = len(ells)
+    global f_BAO_ell
+    f_BAO_ell = np.zeros((nell,len(k)))
+    for i,ell_i in enumerate(ells):
+        f_BAO_ell[i] = model.Pk_noBAO(model.P_HI_ell(ell_i,k,z,Pmod,cosmopars,surveypars),k)[1]
 
     dk = np.diff(k)
     if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
@@ -121,7 +141,6 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
     Npar = len(theta_ids)
     F = np.zeros((Npar,Npar))
     global deriv_i; global deriv_j
-    nell = len(ells)
     for i in range(Npar):
         def deriv_i(k):
             if theta_ids[i]==r'$\overline{T}_{\rm HI}$': return dPell_dtheta(ells,k,dlnP_dTbar)
@@ -129,6 +148,7 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
             if theta_ids[i]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
             if theta_ids[i]==r'$D_A$': return dPell_dtheta(ells,k,dlnP_dD_A)
             if theta_ids[i]==r'$H$': return dPell_dtheta(ells,k,dlnP_dH)
+            if theta_ids[i]==r'$A$': return dPell_dtheta(ells,k,dlnP_dA)
             if theta_ids[i]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
         for j in range(Npar):
             if j>=i: # avoid calculating symmetric off-diagonals twice
@@ -138,6 +158,7 @@ def Matrix_ell(theta_ids,k,Pmod_,z_,cosmopars_,surveypars_,V_bin_,ells=[0,2,4]):
                     if theta_ids[j]==r'$f$': return dPell_dtheta(ells,k,dlnP_df)
                     if theta_ids[j]==r'$D_A$': return dPell_dtheta(ells,k,dlnP_dD_A)
                     if theta_ids[j]==r'$H$': return dPell_dtheta(ells,k,dlnP_dH)
+                    if theta_ids[j]==r'$A$': return dPell_dtheta(ells,k,dlnP_dA)
                     if theta_ids[j]==r'$f_{\rm NL}$': return dPell_dtheta(ells,k,dlnP_dfNL)
                 Cinv = np.linalg.inv( Cov_ell(ells,k,z,Pmod,cosmopars,surveypars) )
                 # Sum over ell and integrate over k in one big matrix operation:
@@ -174,7 +195,8 @@ def ContourEllipse(F,x,y,theta):
     # Flip major/minor axis depending on which parameter is dominant
     if Cxx >= Cyy: w = 2*a; h = 2*b
     else: w = 2*b; h = 2*a
-    ang = 0.5*np.arctan( 2*Cxy / (Cxx - Cyy) )
+    if Cxx==Cyy: ang = 0.5*np.arctan(1e30) # avoid divide by zero for diagonal params p1=p2
+    else: ang = 0.5*np.arctan( 2*Cxy / (Cxx - Cyy) )
     ### Create ellipse equation line for plotting
     phi = np.linspace(0, 2*np.pi, 100) # angle variables
     Ellps = np.array([w*np.cos(phi) , h*np.sin(phi)]) # Ellipse equation
@@ -190,12 +212,25 @@ def CornerPlot(Fs,theta,theta_labels,Flabels=None):
     Npar = np.shape(Fs[0])[0]
     fig = plt.figure(figsize=(8,8))
     gs = GridSpec(Npar,Npar) # rows,columns
-    theta_max = np.zeros(Npar)
-    theta_min = np.zeros(Npar)
+    xmins,xmaxs,ymins,ymaxs = np.zeros((Npar,Npar)),np.zeros((Npar,Npar)),np.zeros((Npar,Npar)),np.zeros((Npar,Npar))
+    ell_xs,ell_ys = np.zeros((len(Fs),100)),np.zeros((len(Fs),100))
+    for i in range(Npar):
+        for j in range(Npar):
+            if j>i: continue # only plot one corner of panels
+            for Fi in range(len(Fs)):
+                F = Fs[Fi]
+                ell_xs[Fi],ell_ys[Fi] = ContourEllipse(F,i,j,theta)
+            xmins[i,j] = np.min(ell_xs); ymins[i,j] = np.min(ell_ys)
+            xmaxs[i,j] = np.max(ell_xs); ymaxs[i,j] = np.max(ell_ys)
+            xbuff = np.abs(xmaxs[i,j] - xmins[i,j])*0.05
+            ybuff = np.abs(ymaxs[i,j] - ymins[i,j])*0.05
+            xmins[i,j] -= xbuff; ymins[i,j] -= ybuff
+            xmaxs[i,j] += xbuff; ymaxs[i,j] += ybuff
     for i in range(Npar):
         for j in range(Npar):
             if j>i: continue # only plot one corner of panels
             ax = fig.add_subplot(gs[i,j]) # First row, first column
+            ax.set_xlim(left=xmins[i,j],right=xmaxs[i,j])
             for Fi in range(len(Fs)):
                 F = Fs[Fi]
                 C = np.linalg.inv(F)
@@ -215,11 +250,14 @@ def CornerPlot(Fs,theta,theta_labels,Flabels=None):
                     else: title = r'$\sigma($'+theta_labels[i]+r'$)/$'+theta_labels[i]+r'$={:#.3g}$'.format(100*sigma/theta[i])+'%'
                     ax.set_title(title)
                     if Fi==(len(Fs)-1):
-                        if i==0 and Flabels is not None: ax.legend(bbox_to_anchor=[1.2,1],fontsize=14,frameon=False,loc='upper left')
+                        if i==0 and Flabels is not None: ax.legend(bbox_to_anchor=[1.2,1.2],fontsize=14,frameon=False,loc='upper left')
                         ax.axvline(theta[i],color='grey',lw=0.5,zorder=-1)
                     continue
                 ell_x,ell_y = ContourEllipse(F,i,j,theta)
                 ax.plot(ell_x,ell_y)
                 ax.axvline(theta[j],color='grey',lw=0.5,zorder=-1)
                 ax.axhline(theta[i],color='grey',lw=0.5,zorder=-1)
-    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+                ax.set_ylim(bottom=ymins[i,j],top=ymaxs[i,j])
+            if j!=0: ax.set_yticks([])
+            if i!=(Npar-1): ax.set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0, right=0.99,top=0.97)

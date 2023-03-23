@@ -15,7 +15,7 @@ def Freq2Red(v):
 
 def get_param_vals(ids,z,cosmopars):
     ''' return model values for parameter strings '''
-    Omega_HI,b_HI,f,D_A,H,bphiHI,f_NL = cosmopars
+    Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL = cosmopars
     vals=[]
     Npar = len(ids)
     for i in range(Npar):
@@ -24,6 +24,7 @@ def get_param_vals(ids,z,cosmopars):
         if ids[i]==r'$f$': vals.append( f )
         if ids[i]==r'$D_A$': vals.append( D_A )
         if ids[i]==r'$H$': vals.append( H )
+        if ids[i]==r'$A$': vals.append( A )
         if ids[i]==r'$f_{\rm NL}$': vals.append( 0 )
     return np.array(vals)
 
@@ -100,7 +101,7 @@ def B_beam(mu,k,R_beam):
 def P_HI(k_f,mu_f,z,Pmod,cosmopars,surveypars):
     ''' 2D signal model for power spectrum '''
     ### _f subscripts mark the "measured" parameters based on fiducial cosmology assumed
-    Omega_HI,b_HI,f,D_A_f,H_f,bphiHI,f_NL = cosmopars
+    Omega_HI,b_HI,f,D_A_f,H_f,A,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
     a_perp, a_para = cosmo.D_A(z)/D_A_f , H_f / cosmo.H(z) # alpha AP parameters
     F_AP = a_para/a_perp
@@ -110,17 +111,33 @@ def P_HI(k_f,mu_f,z,Pmod,cosmopars,surveypars):
 
 def P_HI_obs(k_f,mu_f,z,Pmod,cosmopars,surveypars):
     ''' 2D observational power spectrum with noise components'''
-    Omega_HI,b_HI,f,D_A_f,H_f,bphiHI,f_NL = cosmopars
+    Omega_HI,b_HI,f,D_A_f,H_f,A,bphiHI,f_NL = cosmopars
     zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
     return P_HI(k_f,mu_f,z,Pmod,cosmopars,surveypars) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu_f,k_f,R_beam)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
 
 def P_HI_ell(ell,k,z,Pmod,cosmopars,surveypars):
     ''' Integrate sigma model over mu into multipole ell '''
-    return (2*ell + 1) * integratePkmu(P_HI,ell,k,z,Pmod,cosmopars,surveypars)
+    P_ell = (2*ell + 1) * integratePkmu(P_HI,ell,k,z,Pmod,cosmopars,surveypars)
+    Omega_HI,b_HI,f,D_A_f,H_f,A,bphiHI,f_NL = cosmopars
+    if A!=1:
+        print('here')
+        Pk_smooth,f_BAO = Pk_noBAO(P_ell,k)
+        return (1+A*f_BAO)*Pk_smooth
+    if A==1: return P_ell
 
 def P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars):
     ''' Integrate observation model over mu into multipole ell '''
-    return (2*ell + 1) * integratePkmu(P_HI_obs,ell,k,z,Pmod,cosmopars,surveypars)
+
+    P_ell = (2*ell + 1) * integratePkmu(P_HI_obs,ell,k,z,Pmod,cosmopars,surveypars)
+    Omega_HI,b_HI,f,D_A_f,H_f,A,bphiHI,f_NL = cosmopars
+    zmin,zmax,R_beam,A_sky,t_tot,N_dish = surveypars
+    if A!=1:
+        print('here')
+        if ell==0: P_ell -= P_N(z,zmin,zmax,A_sky,t_tot,N_dish) # Subtract noise to avoid biasing f_BAO
+        Pk_smooth,f_BAO = Pk_noBAO(P_ell,k)
+        if ell==0: return (1+A*f_BAO)*Pk_smooth + P_N(z,zmin,zmax,A_sky,t_tot,N_dish) # retrun noise to monopole
+        else: return (1+A*f_BAO)*Pk_smooth
+    if A==1: return P_ell
 
 def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars):
     '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
@@ -129,3 +146,35 @@ def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars):
     Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars) * Leg(ell)(mugrid)
     Pk = scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
     return Pk
+
+def Pk_noBAO(Pk,k,kBAO=[0.04,0.3]):
+    """ Code from Ze - followin Phil Bull method (https://arxiv.org/pdf/1405.1452.pdf)
+    Construct a smooth power spectrum with BAOs removed, and a corresponding
+    BAO template function, by using a two-stage splining process."""
+    # Get interpolating function for input P(k) in log-log space
+    _interp_pk = scipy.interpolate.interp1d(np.log(k),np.log(Pk),kind='quadratic',bounds_error=False )
+    interp_pk = lambda x: np.exp(_interp_pk(np.log(x)))
+    # Spline all (log-log) points except those in user-defined "wiggle region",
+    # and then get derivatives of result
+    idxs = np.where(np.logical_or(k <= kBAO[0], k >= kBAO[1]))
+    _pk_smooth = scipy.interpolate.UnivariateSpline(np.log(k[idxs]),np.log(Pk[idxs]),k=3,s=0)
+    pk_smooth = lambda x: np.exp(_pk_smooth(np.log(x)))
+    # Construct "wiggles" function using spline as a reference, then spline it
+    # and find its 2nd derivative
+    fwiggle = scipy.interpolate.UnivariateSpline(k,Pk/pk_smooth(k),k=3,s=0)
+    derivs = np.array([fwiggle.derivatives(_k) for _k in k]).T
+    d2 = scipy.interpolate.UnivariateSpline(k, derivs[2], k=3, s=1)
+    # Find maxima and minima of the gradient (zeros of 2nd deriv.), then put a
+    # low-order spline through zeros to subtract smooth trend from wiggles fn.
+    wzeros = d2.roots()
+    wzeros = wzeros[np.where(np.logical_and(wzeros >= kBAO[0], wzeros <= kBAO[1]))]
+    wzeros = np.concatenate(([kBAO[0],], wzeros)) # add first k from wiggle range for smooth trend stiching
+    wzeros = np.concatenate((wzeros, [kBAO[1],])) # add last k from wiggle range for smooth trend stiching
+    wtrend = scipy.interpolate.UnivariateSpline(wzeros, fwiggle(wzeros), k=3, s=0)
+    # Construct smooth "no-bao" function by summing the original splined function and
+    # the wiggles trend function
+    idxs = np.where(np.logical_and(k > kBAO[0], k < kBAO[1]))
+    Pk_smooth = pk_smooth(k)
+    Pk_smooth[idxs] *= wtrend(k[idxs])
+    f_BAO = (Pk - Pk_smooth)/Pk_smooth
+    return Pk_smooth,f_BAO

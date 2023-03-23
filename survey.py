@@ -26,8 +26,8 @@ def params(Survey):
         #zmin,zmax = 0.6,0.7
         A_sky = 4000 # area in sq.deg
         t_tot = 4000 # observation hours
-        #A_sky = 10000
-        #t_tot = 1250
+        A_sky = 10000
+        t_tot = 1250
         N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
     elif Survey=='SKA': # SKA Band 1
