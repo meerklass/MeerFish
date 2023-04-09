@@ -31,8 +31,14 @@ A = 1
 bphiHI = cosmo.b_phi_universality(b_HI)
 f_NL = 0
 
-cosmopars = [Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL]
-surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish]
+#cosmopars = [Omega_HI,b_HI,f,D_A,H,A,bphiHI,f_NL]
+#surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish]
+b_g = 1.5
+bphig = cosmo.b_phi_universality(b_g)
+nbar = None
+
+cosmopars = [Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL]
+surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar]
 
 '''
 P_smooth,f_BAO = model.Pk_noBAO(Pmod(k),k)
@@ -83,7 +89,7 @@ kpara = np.linspace(kmin,kmax,400)
 kperp,kpara = np.meshgrid(kperp,kpara)
 kgrid = np.sqrt(kperp**2 + kpara**2)
 mugrid = kpara/kgrid
-P_HI2D = model.P_HI_obs(kgrid,mugrid,z,Pmod,cosmopars,surveypars)
+P_HI2D = model.P_obs(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tracer='HI')
 plt.imshow(np.log10(P_HI2D),extent=[kmin,kmax,kmin,kmax],origin='lower')
 plt.colorbar()
 plt.xlabel(r'$k_\perp \,[h\,{\rm Mpc}^{-1}]$')
@@ -94,7 +100,7 @@ plt.figure()
 ### Multipole power check:
 ells = [0,2,4]
 for ell in ells:
-    P_HI_obs = model.P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars)
+    P_HI_obs = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
     plt.plot(k,P_HI_obs,label=r'$P^{\rm obs}_{{\rm HI},%s}$'%ell)
 plt.axhline(model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish),color='grey',label=r'$P_{\rm N}$')
 plt.axhline(Tbar**2*model.P_SN(z),color='black',label=r'$\overline{T}_{\rm HI}^2 P_{\rm SN}$ (no beam)')
@@ -104,7 +110,6 @@ plt.ylabel(r'$P_{{\rm HI},\ell}(k)\,[{\rm mK}^2\, h^{-3}\,{\rm Mpc}^{3}]$')
 plt.loglog()
 plt.figure()
 #exit()
-
 
 theta_ids = [\
 #r'$\overline{T}_{\rm HI}$',\
