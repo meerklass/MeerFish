@@ -12,7 +12,7 @@ import fisher
 #Survey = 'MK_LB' # MeerKLASS L-band
 Survey = 'MK_UHF' # MeerKLASS UHF-band
 #Survey = 'SKA'
-z,zmin,zmax,R_beam,A_sky,t_tot,N_dish,V_bin = survey.params(Survey)
+z,zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = survey.params(Survey)
 
 kmin = np.pi/V_bin**(1/3) ### From Tayura https://arxiv.org/pdf/1101.4723.pdf (after eq8)
 kmax = 0.4
@@ -38,14 +38,14 @@ bphig = cosmo.b_phi_universality(b_g)
 nbar = None
 
 cosmopars = [Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL]
-surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar]
+surveypars = [zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar]
 
-'''
+#'''
 P_smooth,f_BAO = model.Pk_noBAO(Pmod(k),k)
 
 ell = 2
 #P_HI_obs = model.P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars)
-P_HI_obs = model.P_HI_ell(ell,k,z,Pmod,cosmopars,surveypars)
+P_HI_obs = model.P_ell(ell,k,z,Pmod,cosmopars,surveypars)
 P_smooth_HI,f_BAO_HI = model.Pk_noBAO(P_HI_obs,k)
 
 plt.plot(k,f_BAO,label='DM Only',zorder=10,color='black',ls='--')
@@ -56,15 +56,21 @@ deltak = k[1]-k[0]
 R_beams = [50,30,10]
 alphas = [0.3,0.6,1]
 for i,R_beam in enumerate(R_beams):
-    surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish]
-    P_HI_obs_wb = model.P_HI_ell_obs(ell,k,z,Pmod,cosmopars,surveypars)
+    surveypars = [zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar]
+    #'''
+    P_HI_obs_wb = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars)
     sig_err = np.sqrt(2*(2*np.pi)**3/V_bin*1/(4*np.pi*k**2*deltak)) * P_HI_obs_wb
-
     if ell==0: P_HI_obs_wb -= model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish) # subtract noise
     P_smooth_HI_wb,f_BAO_HI_wb = model.Pk_noBAO(P_HI_obs_wb,k)
-
     #plt.plot(k,f_BAO_HI_wb,label=r'HI IM ($R_{\rm beam}=%s$)'%R_beam)
     plt.fill_between(k, f_BAO_HI_wb-sig_err/P_smooth_HI_wb, f_BAO_HI_wb+sig_err/P_smooth_HI_wb,alpha=alphas[i],label=r'HI IM ($R_{\rm beam}=%s$)'%R_beam)
+    #'''
+    '''
+    P_g = model.P_ell(ell,k,z,Pmod,cosmopars,surveypars,tracer='g')
+    sig_err = np.sqrt(2*(2*np.pi)**3/V_bin*1/(4*np.pi*k**2*deltak)) * P_g
+    P_smooth_g,f_BAO = model.Pk_noBAO(P_g,k)
+    plt.fill_between(k, f_BAO-sig_err/P_smooth_g, f_BAO+sig_err/P_smooth_g,alpha=alphas[i],label=r'HI IM ($R_{\rm beam}=%s$)'%R_beam)
+    '''
 plt.xscale('log')
 plt.xlabel(r'$k\,[h\,{\rm Mpc}^{-1}]$')
 plt.ylabel(r'$f_{\rm BAO}$')
@@ -73,6 +79,8 @@ if ell==2: plt.title('Quadrupole')
 plt.xlim(left=0.015)
 plt.legend(loc='upper left')
 plt.figure()
+plt.show()
+exit()
 
 plt.plot(k,P_HI_obs,label=r'$P_{\rm HI}$')
 plt.plot(k,P_smooth_HI,label=r'$P_{\rm HI}^{\rm smooth}$')
@@ -81,7 +89,7 @@ plt.loglog()
 plt.legend()
 plt.show()
 exit()
-'''
+#'''
 
 ### 2D model power check:
 kperp = np.linspace(kmin,kmax,400)
@@ -99,17 +107,39 @@ plt.figure()
 
 ### Multipole power check:
 ells = [0,2,4]
+ells = [0]
 for ell in ells:
-    P_HI_obs = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
+    #P_HI_obs = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
+    P_HI_obs = model.P_ell(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
     plt.plot(k,P_HI_obs,label=r'$P^{\rm obs}_{{\rm HI},%s}$'%ell)
-plt.axhline(model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish),color='grey',label=r'$P_{\rm N}$')
-plt.axhline(Tbar**2*model.P_SN(z),color='black',label=r'$\overline{T}_{\rm HI}^2 P_{\rm SN}$ (no beam)')
+#plt.axhline(model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish),color='grey',label=r'$P_{\rm N}$')
+#plt.axhline(Tbar**2*model.P_SN(z),color='black',label=r'$\overline{T}_{\rm HI}^2 P_{\rm SN}$ (no beam)')
+
+plt.axvspan(0.05, 0.2, alpha=0.2, color='red')
+
+t_tot = 1250
+P_N = model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+surveypars = [zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar]
+P_HI_obs = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
+plt.plot(k,P_HI_obs,color='black',ls='--')
+plt.axhline(P_N,color='black',label=r'$P_{\rm N}$ ($%s$hrs)'%t_tot)
+
+t_tot = 500
+P_N = model.P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+surveypars = [zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar]
+P_HI_obs = model.P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
+plt.plot(k,P_HI_obs,color='grey',ls='--')
+plt.axhline(P_N,color='grey',label=r'$P_{\rm N}$ ($%s$hrs)'%t_tot)
+
+
 plt.legend(frameon=False,ncol=3,loc='lower center',bbox_to_anchor=[0.5,0.98])
 plt.xlabel(r'$k\,[h\,{\rm Mpc}^{-1}]$')
 plt.ylabel(r'$P_{{\rm HI},\ell}(k)\,[{\rm mK}^2\, h^{-3}\,{\rm Mpc}^{3}]$')
-plt.loglog()
-plt.figure()
-#exit()
+plt.yscale('log')
+#plt.loglog()
+plt.suptitle('6000 sq.deg')
+plt.show()
+exit()
 
 theta_ids = [\
 #r'$\overline{T}_{\rm HI}$',\
@@ -150,7 +180,7 @@ plt.figure()
 '''
 
 ells = [0]
-F0 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+F0 = fisher.Matrix_ell_OLD(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample0',F0)
 #F0 = np.load('data/FishMatexample0.npy')
 
@@ -160,12 +190,12 @@ ells = [2]
 #F2 = np.load('data/FishMatexample2.npy')
 
 ells = [0,2]
-F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+F02 = fisher.Matrix_ell_OLD(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample02',F02)
 #F02 = np.load('data/FishMatexample02.npy')
 
 ells = [0,2,4]
-F024 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
+F024 = fisher.Matrix_ell_OLD(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells)
 #np.save('data/FishMatexample024',F024)
 #F024 = np.load('data/FishMatexample024.npy')
 

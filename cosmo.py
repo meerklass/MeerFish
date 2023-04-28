@@ -33,6 +33,9 @@ def SetCosmology(builtincosmo='Planck18',z=0,UseCamb=True):
             n_s = 0.968
         if builtincosmo=='Planck18':
             H_0 = 67.4 # [km/(Mpc s)]
+
+            H_0 = 100
+
             h = H_0/100
             Om0 = 0.315 # Omega_m
             Ob0 = 0.0489 # Omega_b
@@ -111,14 +114,6 @@ def D(z):
     D_0 = 5/2 * Om0 * H_0**2 * H(0) * integrate.quad(integrand, 0, 1e3)[0]
     D_z = 5/2 * Om0 * H_0**2 * H(z) * integrate.quad(integrand, z, 1e3)[0]
     return D_z / D_0 # Normalise such that D(z=0) = 1
-
-'''
-def T(k):
-    #Transfer function - from Amendola DE textbook eq 4.207:
-    k_eq = 2e-2
-    x = k / k_eq
-    return np.log(1+0.171*x)/(0.171*x) * ( 1 + 0.284*x + (1.18*x)**2 + (0.399*x)**3 + (0.49*x)**4 )**-0.25
-'''
 
 def MatterPk(z,kmin=1e-3,kmax=10,NonLinear=False):
     '''

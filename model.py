@@ -109,7 +109,7 @@ def P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer='HI'):
     ''' 2D signal model for power spectrum '''
     ### _f subscripts mark the "measured" parameters based on fiducial cosmology assumed
     Omega_HI,b_HI,b_g,f,D_A_f,H_f,A,bphiHI,bphig,f_NL = cosmopars
-    zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar = surveypars
+    zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = surveypars
     a_para,a_perp,k,mu = APpars(k_f,mu_f,D_A_f,H_f,z)
     if tracer=='HI': return 1/a_para*1/a_perp**2 * Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
     if tracer=='g': return 1/a_para*1/a_perp**2 * (b_g + f*mu**2 + bphig*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k)
@@ -118,8 +118,8 @@ def P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer='HI'):
 def P_obs(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer='HI'):
     ''' 2D observational power spectrum with noise components'''
     Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL = cosmopars
-    zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar = surveypars
-    if tracer=='HI': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu_f,k_f,R_beam=0)**2 + P_N(z,zmin,zmax,A_sky,t_tot,N_dish)
+    zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = surveypars
+    if tracer=='HI': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu_f,k_f,R_beam=0)**2 + P_N
     if tracer=='g': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer) + 1/nbar
     if tracer=='X': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer)
 
@@ -138,10 +138,38 @@ def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,tracer):
     Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tracer) * Leg(ell)(mugrid)
     return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
 
-def Pk_noBAO(Pk,k,kBAO=[0.04,0.3]):
+def P_err(k,mu,z,Pmod,cosmopars,surveypars,V_bin,tracer='HI'):
+    dk = np.diff(k)
+    if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
+         print('\nError! - k-bins must be linearly spaced.'); exit()
+    dk = np.mean(dk) # reduce array to a single number
+
+    P_obs_ = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer)
+
+    if tracer=='HI' or tracer=='g': return np.sqrt( 2*(2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * P_obs_
+    if tracer=='X':
+        P_HI = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer='HI')
+        P_g = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer='g')
+        #return 1/np.sqrt( (2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_HI*P_g)
+        return np.sqrt( (2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_HI*P_g)
+
+def P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer='HI'):
+    ''' Integrate error model over mu into multipole ell '''
+    return (2*ell + 1)**2 * integratePkmu_err(P_err,ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer)
+
+def integratePkmu_err(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer):
+    '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,V_bin,tracer) * Leg(ell)(mugrid)
+    return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
+
+def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]):
     """ Code from Ze - following Phil Bull method (https://arxiv.org/pdf/1405.1452.pdf)
     Construct a smooth power spectrum with BAOs removed, and a corresponding
     BAO template function, by using a two-stage splining process."""
+    if k[0]>kBAO[0]: print('ERROR! k-range outside BAO scales'); exit()
+    if k[-1]<kBAO[-1]: print('ERROR! k-range outside BAO scales'); exit()
     # Get interpolating function for input P(k) in log-log space
     _interp_pk = scipy.interpolate.interp1d(np.log(k),np.log(Pk),kind='quadratic',bounds_error=False )
     interp_pk = lambda x: np.exp(_interp_pk(np.log(x)))

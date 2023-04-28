@@ -13,8 +13,16 @@ import fisher
 Survey1 = 'MK_UHF' # MeerKLASS UHF-band
 #Survey = 'SKA'
 
-Survey2 = 'DESI_ELG'
-z,zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar,V_bin = survey.params(Survey1,Survey2)
+Survey2 = 'DESI-ELG'
+#Survey2 = 'MK_UHF'
+
+#zminzmax = [0.9,1.1]
+zminzmax = None
+A_overlap = None
+z,zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = survey.params(Survey1,Survey2,A_sky=A_overlap,zminzmax=zminzmax)
+
+#P_N = 0
+#nbar = 1e8
 
 ### k-bins:
 kmin = np.pi/V_bin**(1/3) ### From Tayura https://arxiv.org/pdf/1101.4723.pdf (after eq8)
@@ -35,12 +43,13 @@ bphiHI = cosmo.b_phi_universality(b_HI)
 f_NL = 0
 
 b_g = 2
-#b_g = b_HI
 bphig = cosmo.b_phi_universality(b_g)
 
 cosmopars = [Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL]
-surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar]
+surveypars = [zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar]
 
+### Plot power spectra:
+'''
 ell = 0
 P_HI = model.P_ell(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI')
 P_g = model.P_ell(ell,k,z,Pmod,cosmopars,surveypars,tracer='g')
@@ -54,31 +63,10 @@ plt.ylabel(r'$P_{{\rm HI,g},\ell}(k)\,[{\rm mK}\, h^{-3}\,{\rm Mpc}^{3}]$')
 plt.loglog()
 plt.figure()
 #exit()
+'''
 
 #### Check BAO-wiggles only: ######
 '''
-ell = 0
-z = 0.8
-deltaz = 0.2
-zmin,zmax = z-deltaz/2,z+deltaz/2
-### Recalcuate cosmology and redshift dependent params:
-cosmo.SetCosmology(z=z)
-Omega_HI = model.OmegaHI(z)
-Tbar = model.Tbar(z,Omega_HI)
-b_HI = model.b_HI(z)
-f = cosmo.f(z)
-D_A = cosmo.D_A(z)
-H = cosmo.H(z)
-bphiHI = cosmo.b_phi_universality(b_HI)
-cosmopars = [Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL]
-
-A_sky = 10000
-V_bin = survey.Vsur(zmin,zmax,A_sky)
-
-surveypars = [zmin,zmax,R_beam,A_sky,t_tot,N_dish,nbar]
-kmin = np.pi/V_bin**(1/3) ### From Tayura https://arxiv.org/pdf/1101.4723.pdf (after eq8)
-kbins = np.arange(kmin,kmax,kmin)
-k = (kbins[1:] + kbins[:-1])/2 #centre of k bins
 deltak = k[1]-k[0]
 
 Pmod = cosmo.MatterPk(z,kmin=kmin-kmin/1000)
@@ -118,22 +106,30 @@ r'$A$',\
 r'$f_{\rm NL}$'\
 ]
 theta = model.get_param_vals(theta_ids,z,cosmopars)
+
+#### Demo multipoles on HI only:
+'''
 Fs = []
-
+tracer = 'HI'
 ells = [0]
-F0 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer='X')
-Fs.append(F0)
-
+Fs.append( fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer=tracer) )
 ells = [0,2]
-F02 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer='X')
-Fs.append(F02)
-
+Fs.append( fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer=tracer) )
 ells = [0,2,4]
-F024 = fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer='X')
-Fs.append(F024)
-
-#Flabels=None
+Fs.append( fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer=tracer) )
 Flabels = [r'$P_0$',r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$']
-#Flabels = [r'$P_0 + P_2$',r'$P_0 + P_2 + P_4$']
 fisher.CornerPlot(Fs,theta,theta_ids,Flabels)
+#plt.suptitle(Survey1 + ' X ' + Survey2 + r' [$%s<z<%s$]'%(np.round(zmin,1),np.round(zmax,1)),x=0.98,horizontalalignment='right',fontsize=18)
+plt.show()
+'''
+
+#### Demo Multi-tracer benefit:
+Fs = []
+ells = [0,2,4]
+tracers = ['HI','g','MT']
+for i in range(3):
+    Fs.append( fisher.Matrix_ell(theta_ids,k,Pmod,z,cosmopars,surveypars,V_bin,ells,tracer=tracers[i]) )
+Flabels=['HI auto','Gal auto','Multi-tracer']
+fisher.CornerPlot(Fs,theta,theta_ids,Flabels)
+plt.suptitle(Survey1 + ' X ' + Survey2 + r' [$%s<z<%s$]'%(np.round(zmin,1),np.round(zmax,1)),x=0.98,horizontalalignment='right',fontsize=18)
 plt.show()
