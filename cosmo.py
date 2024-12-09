@@ -19,6 +19,12 @@ def SetCosmology(builtincosmo='Planck18',z=0,UseCamb=True):
         global n_s
         global A_s
         global delta_c
+        if builtincosmo=='Barriera':
+            H_0 = 67.74 # [km/(Mpc s)]
+            h = H_0/100
+            Om0 = 0.3089 # Omega_m
+            Ob0 = 0.0486 # Omega_b
+            n_s = 0.967
         if builtincosmo=='WMAP1':
             H_0 = 73 # [km/(Mpc s)]
             h = H_0/100
@@ -33,9 +39,6 @@ def SetCosmology(builtincosmo='Planck18',z=0,UseCamb=True):
             n_s = 0.968
         if builtincosmo=='Planck18':
             H_0 = 67.4 # [km/(Mpc s)]
-
-            H_0 = 100
-
             h = H_0/100
             Om0 = 0.315 # Omega_m
             Ob0 = 0.0489 # Omega_b
@@ -77,7 +80,21 @@ def Omega_b(z=0):
     if z!=0: print('\nError: Cosmotools needs evoloution for Omega_b(z)!')
     return Ob0
 
-def D_com(z):
+def D_com(z,cosmopars=None):
+    if cosmopars is not None:
+        Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
+
+        H_0_fid = np.copy(H_0)
+        H_0_new = H_0_fid/a_para
+        #Comoving distance [Mpc/h]
+        func = lambda z: (c_km/H_0_new)/E(z)
+        #h_new = H_0_new/100
+        #return scipy.integrate.romberg(func,0,z) * h_new
+        #### NOT DIALATING little h ######
+        h = H_0_fid/100
+        return scipy.integrate.romberg(func,0,z) * h
+        ####################################
+
     if UseCamb_global==True:
         #Comoving distance [Mpc/h]
         func = lambda z: (c_km/H_0)/E(z)
@@ -112,6 +129,7 @@ def D(z):
     #   https://www.astro.rug.nl/~weygaert/tim1publication/lss2009/lss2009.linperturb.pdf
     integrand = lambda zi: (1+zi)/(H(zi)**3)
     D_0 = 5/2 * Om0 * H_0**2 * H(0) * integrate.quad(integrand, 0, 1e3)[0]
+    if z==0: return D_0 # Growth factor normalisation factor
     D_z = 5/2 * Om0 * H_0**2 * H(z) * integrate.quad(integrand, z, 1e3)[0]
     return D_z / D_0 # Normalise such that D(z=0) = 1
 

@@ -1,9 +1,11 @@
 import numpy as np
 import cosmo
 import scipy
+import matplotlib.pyplot as plt
 from scipy import integrate
 from scipy.special import legendre as Leg
 v_21cm = 1420.405751#MHz
+c_km = 299792.458 #km/s
 
 def Red2Freq(z):
     # Convert redshift to frequency for HI emission (freq in MHz)
@@ -15,18 +17,38 @@ def Freq2Red(v):
 
 def get_param_vals(ids,z,cosmopars):
     ''' return model values for parameter strings '''
-    Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL = cosmopars
+    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
     vals=[]
     Npar = len(ids)
     for i in range(Npar):
-        if ids[i]==r'$\overline{T}_{\rm HI}$': vals.append( Tbar(z,Omega_HI) )
-        if ids[i]==r'$b_{\rm HI}$': vals.append( b_HI )
+        if ids[i]==r'$\overline{T}_{\rm HI}$': vals.append( Tbar1 )
+        if ids[i]==r'$b_1$': vals.append( b1 )
+        if ids[i]==r'$b_2$': vals.append( b2 )
+        if ids[i]==r'$b^\phi_1$': vals.append( bphi1 )
+        if ids[i]==r'$b^\phi_2$': vals.append( bphi2 )
         if ids[i]==r'$f$': vals.append( f )
-        if ids[i]==r'$D_A$': vals.append( D_A )
-        if ids[i]==r'$H$': vals.append( H )
-        if ids[i]==r'$A$': vals.append( A )
-        if ids[i]==r'$f_{\rm NL}$': vals.append( 0 )
+        if ids[i]==r'$\alpha_\perp$': vals.append( a_perp )
+        if ids[i]==r'$\alpha_\parallel$': vals.append( a_para )
+        if ids[i]==r'$A_{\rm BAO}$': vals.append( A_BAO )
+        if ids[i]==r'$f_{\rm NL}$': vals.append( f_NL )
     return np.array(vals)
+
+def get_param_selection(ids):
+    theta_select=[]
+    Npar = len(ids)
+    for i in range(Npar):
+        if ids[i]==r'$\overline{T}_{\rm HI}$': theta_select.append(0)
+        if ids[i]==r'$\overline{T}_{\rm HI}$': theta_select.append(1)
+        if ids[i]==r'$b_1$': theta_select.append( 2 )
+        if ids[i]==r'$b_2$': theta_select.append( 3 )
+        if ids[i]==r'$b^\phi_1$': theta_select.append( 4 )
+        if ids[i]==r'$b^\phi_2$': theta_select.append( 5 )
+        if ids[i]==r'$f$': theta_select.append( 6 )
+        if ids[i]==r'$\alpha_\perp$': theta_select.append( 7 )
+        if ids[i]==r'$\alpha_\parallel$': theta_select.append( 8 )
+        if ids[i]==r'$A_{\rm BAO}$': theta_select.append( 9 )
+        if ids[i]==r'$f_{\rm NL}$': theta_select.append( 10 )
+    return np.array(theta_select)
 
 def b_HI(z):
     ''' HI linear bias '''
@@ -86,82 +108,121 @@ def P_N(z,zmin,zmax,A_sky,t_tot,N_dish,T_sys=None,A_pix=0.3**2,deltanu=0.2,epsil
     N_p = A_sky / A_pix # Number of pointings[or pixels]
     t_p = N_dish * t_tot / N_p  # time per pointing
     sigma_N = T_sys / (epsilon * np.sqrt(2 * deltanu * t_p) ) # Santos+15 eq 5.1
+
+    #### CURRENTLY FIXING DISTANCES FOR FIDUCIAL COSMOLOGY: ####
     d_c = cosmo.D_com(z)
     delta_lz = cosmo.D_com(Freq2Red(nu1)) - d_c
+    ############################################################
+
     pix_area = (d_c * np.radians(np.sqrt(A_pix)) )**2 # [Mpc/h]^2 based on fixed pixel size in deg
     V_cell = pix_area * delta_lz
     P_N = V_cell * sigma_N**2
     return P_N
 
-def B_beam(mu,k,R_beam):
+def B_beam(mu,k,z,theta_FWHM,cosmopars):
     ''' Gaussian beam model '''
-    if R_beam==0: return 1
+    if theta_FWHM==0: return 1
+    sig_beam = theta_FWHM/(2*np.sqrt(2*np.log(2))) # in degrees
+    d_c = cosmo.D_com(z,cosmopars) # Comoving distance to frequency bin
+    R_beam = d_c * np.radians(sig_beam) #Beam size [Mpc/h]
     return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
 
-def APpars(k_f,mu_f,D_A_f,H_f,z):
-    a_perp, a_para = cosmo.D_A(z)/D_A_f , H_f / cosmo.H(z) # alpha AP parameters
+def B_zerr(mu,k,sigma_z,z,a_para=1):
+    ### from eq 12: https://arxiv.org/pdf/2305.00404.pdf
+    if sigma_z==0: return 1
+    #Sigma_z = a_para * c_km * sigma_z / cosmo.H(z)
+    Sigma_z = c_km * sigma_z / cosmo.H(z)
+    return np.exp(-k**2*mu**2*Sigma_z**2/2)
+
+def APpars(k_f,mu_f,a_perp,a_para):
     F_AP = a_para/a_perp
     k = k_f/a_perp * np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
     mu = mu_f/F_AP / np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
-    return a_para,a_perp,k,mu
+    return k,mu
 
-def P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer='HI'):
+def P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
     ''' 2D signal model for power spectrum '''
     ### _f subscripts mark the "measured" parameters based on fiducial cosmology assumed
-    Omega_HI,b_HI,b_g,f,D_A_f,H_f,A,bphiHI,bphig,f_NL = cosmopars
-    zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = surveypars
-    a_para,a_perp,k,mu = APpars(k_f,mu_f,D_A_f,H_f,z)
-    if tracer=='HI': return 1/a_para*1/a_perp**2 * Tbar(z,Omega_HI)**2 * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,R_beam)**2
-    if tracer=='g': return 1/a_para*1/a_perp**2 * (b_g + f*mu**2 + bphig*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k)
-    if tracer=='X': return 1/a_para*1/a_perp**2 * Tbar(z,Omega_HI) * (b_HI + f*mu**2 + bphiHI*f_NL*cosmo.M(k,z)**(-1))*(b_g + f*mu**2 + bphig*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) * B_beam(mu,k,R_beam)
+    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
+    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    k,mu = APpars(k_f,mu_f,a_perp,a_para)
+    alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
+    if tracer=='1': return alpha_v * Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM1,cosmopars)**2 * B_zerr(mu,k,sigma_z1,z,a_para)**2
+    if tracer=='2': return alpha_v * Tbar2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM2,cosmopars)**2 * B_zerr(mu,k,sigma_z2,z,a_para)**2
+    if tracer=='X': return alpha_v * Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) * B_beam(mu,k,z,theta_FWHM1,cosmopars) * B_beam(mu,k,z,theta_FWHM2,cosmopars) * B_zerr(mu,k,sigma_z1,z,a_para) * B_zerr(mu,k,sigma_z2,z,a_para)
 
-def P_obs(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer='HI'):
+def P_obs(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
     ''' 2D observational power spectrum with noise components'''
-    Omega_HI,b_HI,b_g,f,D_A,H,A,bphiHI,bphig,f_NL = cosmopars
-    zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar = surveypars
-    if tracer=='HI': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer) + Tbar(z,Omega_HI)**2 * P_SN(z) * B_beam(mu_f,k_f,R_beam=0)**2 + P_N
-    if tracer=='g': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer) + 1/nbar
-    if tracer=='X': return P(k_f,mu_f,z,Pmod,cosmopars,surveypars,tracer)
+    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
 
-def P_ell(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI'):
+    #alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
+    alpha_v = 1 # Not include for noise term in Euclid prep paper
+
+    if tracer=='1': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) +  alpha_v * P_N1
+    if tracer=='2': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) +  alpha_v * P_N2
+    if tracer=='X': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer)
+
+def P_ell(ell,k,Pmod,cosmopars,surveypars,tracer):
     ''' Integrate signal model over mu into multipole ell '''
-    return (2*ell + 1) * integratePkmu(P,ell,k,z,Pmod,cosmopars,surveypars,tracer)
+    return (2*ell + 1) * integratePkmu(P,ell,k,Pmod,cosmopars,surveypars,tracer)
 
-def P_ell_obs(ell,k,z,Pmod,cosmopars,surveypars,tracer='HI'):
+def P_ell_obs(ell,k,Pmod,cosmopars,surveypars,tracer):
     ''' Integrate observation model over mu into multipole ell '''
-    return (2*ell + 1) * integratePkmu(P_obs,ell,k,z,Pmod,cosmopars,surveypars,tracer)
+    return (2*ell + 1) * integratePkmu(P_obs,ell,k,Pmod,cosmopars,surveypars,tracer)
 
-def integratePkmu(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,tracer):
+def integratePkmu(Pfunc,ell,k,Pmod,cosmopars,surveypars,tracer):
+    '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    Pkmu = Pfunc(kgrid,mugrid,Pmod,cosmopars,surveypars,tracer) * Leg(ell)(mugrid)
+    return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
+
+################################################################################################
+###### CHECK P_err and P_ell_err functions - coded quickly ######################
+################################################################################################
+def Nmodes(k,mu,V_bin):
+    '''
+    NOT WORKING - GIVING SMALL NUMBERS
+    '''
+    dk = np.mean(np.diff(k[0,:]))
+    dmu = np.mean(np.diff(mu[:,0]))
+    print(dk)
+    print(dmu)
+    print(V_bin)
+    return k**2*dk*dmu*V_bin / (8*np.pi**2)
+
+def P_err(k,mu,z,Pmod,cosmopars,surveypars,tracer):
+    P_obs_ = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer)
+
+    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    '''
+    if tracer=='1' or tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin))
+    if tracer=='X':
+        P_1 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='1')
+        P_2 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='2')
+        return np.sqrt( 1/(2*Nmodes(k,mu,V_bin)) * (P_obs_**2 + P_1*P_2) )
+    '''
+    dk = np.mean(np.diff(k[0,:]))
+    if tracer=='1': return np.sqrt( 2*(2*np.pi)**3/V_bin1 * 1/(4*np.pi*k**2*dk) ) * P_obs_
+    if tracer=='2': return np.sqrt( 2*(2*np.pi)**3/V_bin2 * 1/(4*np.pi*k**2*dk) ) * P_obs_
+    if tracer=='X':
+        V_binX = np.min([V_bin1,V_bin2])
+        P_1 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='1')
+        P_2 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='2')
+        return np.sqrt( (2*np.pi)**3/V_binX * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_1*P_2)
+
+def P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,tracer):
+    ''' Integrate error model over mu into multipole ell '''
+    return (2*ell + 1)**2 * integratePkmu_err(P_err,ell,k,z,Pmod,cosmopars,surveypars,tracer)
+
+################################################################################################
+################################################################################################
+def integratePkmu_err(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,tracer):
     '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
     mu = np.linspace(0,1,1000)
     kgrid,mugrid = np.meshgrid(k,mu)
     Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tracer) * Leg(ell)(mugrid)
-    return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
-
-def P_err(k,mu,z,Pmod,cosmopars,surveypars,V_bin,tracer='HI'):
-    dk = np.diff(k)
-    if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
-         print('\nError! - k-bins must be linearly spaced.'); exit()
-    dk = np.mean(dk) # reduce array to a single number
-
-    P_obs_ = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer)
-
-    if tracer=='HI' or tracer=='g': return np.sqrt( 2*(2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * P_obs_
-    if tracer=='X':
-        P_HI = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer='HI')
-        P_g = P_obs(k,mu,z,Pmod,cosmopars,surveypars,tracer='g')
-        #return 1/np.sqrt( (2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_HI*P_g)
-        return np.sqrt( (2*np.pi)**3/V_bin * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_HI*P_g)
-
-def P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer='HI'):
-    ''' Integrate error model over mu into multipole ell '''
-    return (2*ell + 1)**2 * integratePkmu_err(P_err,ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer)
-
-def integratePkmu_err(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,V_bin,tracer):
-    '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
-    mu = np.linspace(0,1,1000)
-    kgrid,mugrid = np.meshgrid(k,mu)
-    Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,V_bin,tracer) * Leg(ell)(mugrid)
     return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
 
 def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]):
@@ -197,3 +258,7 @@ def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]):
     Pk_smooth[idxs] *= wtrend(k[idxs])
     f_BAO = (Pk - Pk_smooth)/Pk_smooth
     return Pk_smooth,f_BAO
+
+def ChiSquare(x_obs,x_mod,x_err):
+    #Reduced Chi-squared function
+    return np.sum( ((x_obs-x_mod)/x_err)**2 )

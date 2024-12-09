@@ -7,11 +7,13 @@ import model
 c_km = 299792.458 #km/s
 c = c_km*1e3
 
-def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
+def params(Survey1,Survey2=None,A_sky=None,zminzmax=None,f_tobsloss=0,t_tot=None):
 
     # A_sky: manual input for overlapping sky area between two surveys. If None
     #   given, A_sky will default to the full area for the smallest survey,
     #   assuming 100% overlap.
+
+    # f_tobsloss: The fraction of IM obs time lost to flagging, failures etc.
 
     if Survey2==None: Survey2 = Survey1
     zmins,zmaxs = [],[] # Arrays to collect z limits for both surveys
@@ -20,12 +22,27 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
 
     ### Telescope/survey parameters:
     if Survey1=='MK_2019' or Survey2=='MK_2019': # MeerKAT 2019 pilot survey in L-band
+        '''
         if zminzmax==None: zmins.append(0.4); zmaxs.append(0.46)
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
         z = np.mean([zmins[-1],zmaxs[-1]]) # initial central redshift
+        '''
+        if zminzmax is not None:
+            zmin1,zmax1,zmin2,zmax2 = zminzmax[0],zminzmax[1],zminzmax[0],zminzmax[1]
+            z =  np.mean([zminzmax[0],zminzmax[1]])
+        else:
+            if Survey1=='MK_2019':
+                zmin1,zmax1 = 0.4,0.46
+                z = np.mean([zmin1,zmax1])
+            if Survey2=='MK_2019':
+                zmin2,zmax2 = 0.4,0.46
+                z = np.mean([zmin2,zmax2])
         cosmo.SetCosmology(z=z) # set initial cosmology for P_N
-        A_skys.append(100) # area in sq.deg
-        t_tot = 5 # observation hours
+        A_sky1 = 100 # area in sq.deg
+
+
+
+        if t_tot==None: t_tot = 5 * (1 - f_tobsloss) # observation hours
         N_dish = 60 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         P_N = model.P_N(z,zmins[-1],zmaxs[-1],A_skys[-1],t_tot,N_dish)
@@ -35,7 +52,7 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
         z = np.mean([zmins[-1],zmaxs[-1]]) # initial central redshift
         cosmo.SetCosmology(z=z) # set initial cosmology for P_N
         A_skys.append(4000) # area in sq.deg
-        t_tot = 4000 # observation hours
+        if t_tot==None: t_tot = 4000 * (1 - f_tobsloss) # observation hours
         N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         P_N = model.P_N(z,zmins[-1],zmaxs[-1],A_skys[-1],t_tot,N_dish)
@@ -44,13 +61,8 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
         z = np.mean([zmins[-1],zmaxs[-1]]) # initial central redshift
         cosmo.SetCosmology(z=z) # set initial cosmology for P_N
-
         A_skys.append(10000) # area in sq.deg
-        t_tot = 1250
-
-        #t_tot = 180
-        #A_skys.append(6000)
-
+        if t_tot==None: t_tot = 1250 * (1 - f_tobsloss)
         N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         P_N = model.P_N(z,zmins[-1],zmaxs[-1],A_skys[-1],t_tot,N_dish)
@@ -60,7 +72,7 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
         z = np.mean([zmins[-1],zmaxs[-1]]) # initial central redshift
         cosmo.SetCosmology(z=z) # set initial cosmology for P_N
         A_skys.append(20000) # area in sq.deg
-        t_tot = 10000 # observation hours
+        if t_tot==None: t_tot = 10000 * (1 - f_tobsloss) # observation hours
         N_dish = 197 # number of dishes
         D_dish = 15 # diameter of dish [metres]
         P_N = model.P_N(z,zmins[-1],zmaxs[-1],A_skys[-1],t_tot,N_dish)
@@ -74,7 +86,7 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
     elif Survey1=='DESI-ELG' or Survey2=='DESI-ELG': # DESI Emission Line Galaxies
         if zminzmax==None: zmins.append(0.8);zmaxs.append(1.4)
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
-        A_skys.append(5000) # area in sq.deg
+        A_skys.append(15000) # area in sq.deg
         ####### AMEND TO N(z) profile ##########
         Ngal_per_deg2 = 2400 # from https://arxiv.org/pdf/2010.11281.pdf
         Ngal = Ngal_per_deg2 * A_skys[-1]
@@ -104,9 +116,9 @@ def params(Survey1,Survey2=None,A_sky=None,zminzmax=None):
     if A_sky==None: A_sky = np.min(A_skys) # assumes 100% survey overlap
     V_bin = Vsur(zmin,zmax,A_sky)
     cosmo.SetCosmology(z=z)
-    if D_dish is None: R_beam = None
-    else: R_beam = BeamPars(D_dish,z)[1]
-    return z,zmin,zmax,A_sky,V_bin,R_beam,t_tot,N_dish,P_N,nbar
+    if D_dish is None: theta_FWHM,R_beam = None,None
+    else: theta_FWHM,R_beam = BeamPars(D_dish,z)
+    return z,zmin,zmax,A_sky,V_bin,theta_FWHM,t_tot,N_dish,P_N,nbar
 
 def BeamPars(D_dish,z):
     ''' Calclate FWHM of beam in deg and comoving [Mpc/h] '''

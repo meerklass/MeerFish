@@ -6,7 +6,7 @@ A Fisher forecast code focusing on upcoming large-sky single-dish HI intensity m
 > To survey the Universe at radio wavelengths we have **MeerKAT**<br/>
 > For providing updated Fisher forecasts we have **MeerFish**
 
-The paper accompanying this code *Precision cosmology with forthcoming HI intensity mapping surveys* can be found below:
+The paper accompanying this code *PAPER TITLE* can be found below:
 > [https://arxiv.org/abs/????.?????]
 
 ## Code developers:
