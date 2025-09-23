@@ -10,32 +10,140 @@ from matplotlib.gridspec import GridSpec
 import model
 import cosmo
 
-epsilon = 1e-3 # differential step size **** CHECK FOR STABILITY ****
-def dP_dtheta_stencil(k,mu,theta_id,tracer):
+epsilon = 1e-2 # differential step size **** CHECK FOR STABILITY ****
+#epsilon = 1e-3 # differential step size **** CHECK FOR STABILITY ****
+#epsilon = 1e-5 # differential step size **** CHECK FOR STABILITY ****
+#epsilon = 1e-9 # differential step size **** CHECK FOR STABILITY ****
+# decreased the above to fix failed Fisher matrices on some f_NL, b_phi, b1 in multi-tracer
+
+def dP_dtheta_stencil(k,mu,ell,theta_id,tracer):
     '''Numerical derivation using five-point stencil method -
     see eq201 in Euclid paper: https://www.aanda.org/articles/aa/pdf/2020/10/aa38071-20.pdf'''
     # Define kicks to input parameter then calculate 5 point stencil numerical derivative
     kick_ind = np.zeros(len(cosmopars)) # binary mask to select input parameter to kick
-    #if theta_id==r'$\overline{T}_{\rm HI}$':
-    if theta_id==r'$b_1$': theta,kick,kick_ind[2] = b1,b1*epsilon,1
-    if theta_id==r'$b_2$': theta,kick,kick_ind[3] = b2,b2*epsilon,1
-    if theta_id==r'$b^\phi_1$': theta,kick,kick_ind[4] = bphi1,bphi1*epsilon,1
-    if theta_id==r'$b^\phi_2$': theta,kick,kick_ind[5] = bphi2,bphi2*epsilon,1
-    if theta_id==r'$f$': theta,kick,kick_ind[6] = f,f*epsilon,1
-    if theta_id==r'$\alpha_\perp$': theta,kick,kick_ind[7] = a_perp,a_perp*epsilon,1
-    if theta_id==r'$\alpha_\parallel$': theta,kick,kick_ind[8] = a_para,a_para*epsilon,1
+    if theta_id==r'$\overline{T}_{\rm HI}$': kick,kick_ind[0] = Tbar1*epsilon,1
+    if theta_id==r'$b_1$': kick,kick_ind[2] = b1*epsilon,1
+    if theta_id==r'$b_2$': kick,kick_ind[3] = b2*epsilon,1
+    if theta_id==r'$b^\phi_1$': kick,kick_ind[4] = bphi1*epsilon,1
+    if theta_id==r'$b^\phi_2$': kick,kick_ind[5] = bphi2*epsilon,1
+    if theta_id==r'$f$': kick,kick_ind[6] = f*epsilon,1
+    if theta_id==r'$\alpha_\perp$': kick,kick_ind[7] = a_perp*epsilon,1
+    if theta_id==r'$\alpha_\parallel$': kick,kick_ind[8] = a_para*epsilon,1
     if theta_id==r'$A_{\rm BAO}$': return dPell_dtheta(ells,k,dlnP_dA,tau)
-    if theta_id==r'$f_{\rm NL}$': theta,kick,kick_ind[10] = 1,epsilon,1 # set theta=1 and kick=epsilon for f_NL to avoid divide by zero and zero kick
+    if theta_id==r'$f_{\rm NL}$': kick,kick_ind[10] = epsilon,1 # set kick=epsilon for f_NL to avoid divide by zero and zero kick
     pp = cosmopars + kick_ind*kick
     pm = cosmopars - kick_ind*kick
     p2p = cosmopars + kick_ind*2*kick
     p2m = cosmopars - kick_ind*2*kick
-    return 8*(model.P(k,mu,Pmod,pp,surveypars,tracer) - model.P(k,mu,Pmod,pm,surveypars,tracer) ) / (12*epsilon*theta) \
-    - (model.P(k,mu,Pmod,p2p,surveypars,tracer) - model.P(k,mu,Pmod,p2m,surveypars,tracer) ) / (12*epsilon*theta)
+    return (-1*model.P(k,mu,Pmod,p2p,surveypars,tracer)*Leg(ell)(mu) + 8*model.P(k,mu,Pmod,pp,surveypars,tracer)*Leg(ell)(mu) - 8*model.P(k,mu,Pmod,pm,surveypars,tracer)*Leg(ell)(mu) + model.P(k,mu,Pmod,p2m,surveypars,tracer)*Leg(ell)(mu)) / (12*kick)
 
 def dlnP_dA(k,mu,tracer):
     return f_BAO/(1+A_BAO*f_BAO)
 
+def dPell_dtheta(ells,k,theta_id,tau):
+    '''**** CHANGE THIS DESCRIPTION ******* Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
+        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
+    ntau,nell,nk = len(tau),len(ells),len(k)
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    res = np.zeros((ntau,nell*nk))
+    subres = np.zeros((nell,nk))
+    for t in range(ntau):
+        for i,ell_i in enumerate(ells):
+            if theta_id==r'$A_{\rm BAO}$':
+                global f_BAO
+                f_BAO = f_BAO_ell[t,i]
+                integrand = (2*ell_i+1) * dlnP_dA(kgrid,mugrid,tau[t]) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t]) * Leg(ell_i)(mugrid)
+            else:
+                integrand = (2*ell_i+1) * dP_dtheta_stencil(kgrid,mugrid,ell_i,theta_id,tau[t])
+            ## Multiply by k so that 2 factors of deltaP/deltatheta in Fisher matrix picks up k^2 term.
+            subres[i] = k * scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
+        res[t] = np.ravel(subres)
+    return np.ravel(res)
+
+def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,ells,tracer):
+    '''Compute Fisher matrix for multipoles with parameter set [theta]'''
+
+    global z,Pmod,cosmopars,surveypars
+    Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
+    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
+
+    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    if tracer=='1': V_bin = V_bin1
+    if tracer=='2': V_bin = V_bin2
+    if tracer=='X' or tracer=='MT': V_bin = V_binX
+
+    if tracer=='1': tau = ['1']
+    if tracer=='2': tau = ['2']
+    if tracer=='X': tau = ['X']
+    if tracer=='MT': tau = ['1','2','X']
+
+    ntau,nell,nk = len(tau),len(ells),len(k)
+
+    if r'$A_{\rm BAO}$' in theta_ids: # Only need to do if constraining A_BAO
+        global f_BAO_ell
+        f_BAO_ell = np.zeros((ntau,nell,len(k)))
+        for t in range(ntau):
+            for i,ell_i in enumerate(ells):
+                f_BAO_ell[t,i] = model.Pk_noBAO(model.P_ell(ell_i,k,Pmod,cosmopars,surveypars,tau[t]),k)[1]
+
+    dk = np.diff(k)
+    if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
+         print('\nError! - k-bins must be linearly spaced.'); exit()
+    dk = np.mean(dk) # reduce array to a single number
+    Npar = len(theta_ids)
+
+    Cinv = np.linalg.inv( Cov_ell(ells,k,Pmod,cosmopars,surveypars,tau) )
+    F = np.zeros((Npar,Npar)) # Full Fisher matrix summed over tracers
+    for i in range(Npar):
+        def deriv_i(k):
+            return dPell_dtheta(ells,k,theta_ids[i],tau)
+        for j in range(Npar):
+            if j>=i: # avoid calculating symmetric off-diagonals twice
+                def deriv_j(k):
+                    return dPell_dtheta(ells,k,theta_ids[j],tau)
+                # Sum over ell and integrate over k in one big matrix operation:
+                F[i,j] += dk * np.dot( np.dot( deriv_i(k).T,Cinv ) , deriv_j(k) )
+                '''
+                #### SANITY CHECK: THIS LOOP GIVES IDENTICAL RESULT AS ABOVE DOT PRODUCT OPERATION #####
+                dPdth_i,dPdth_j = deriv_i(k),deriv_j(k)
+                for s0 in range(nell*ntau):
+                    for s1 in range(nell*ntau):
+                        F[i,j] += np.sum( dk * dPdth_i[s0*nk:(s0+1)*nk] * np.diag(Cinv[s0*nk:(s0+1)*nk,s1*nk:(s1+1)*nk]) * dPdth_j[s1*nk:(s1+1)*nk] )
+                '''
+            if j<i: F[i,j] = F[j,i]
+    F *= V_bin/(4*np.pi**2)
+    return F
+
+def Cov_ell(ells,k,Pmod,cosmopars,surveypars,tau):
+    ''' (n_ell * nk) X (n_ell * nk) multi-tracer [t1xt2] reduced covariance matrix
+    for multipoles where each element integrates over mu '''
+    nell,nk = len(ells),len(k)
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    ntau = len(tau)
+    C = np.zeros((ntau*nell*nk,ntau*nell*nk))
+    for t0 in range(ntau):
+        for t1 in range(ntau):
+            C_sub = np.zeros((nell*nk,nell*nk))
+            for i,ell_i in enumerate(ells):
+                for j,ell_j in enumerate(ells):
+                    # Get correct covariance matrix depending on tracer combination:
+                    if tau[t0]=='X' and tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * ( model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'X')**2 + model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'1')*model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'2') )
+                    else:
+                        if tau[t0]==tau[t1]: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t0])**2
+                        else:
+                            if tau[t0]=='X' or tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t0]) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t1])
+                            else: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,'X')**2
+                    # Calculating k's along diagonal of each multipole permutation in C
+                    #  - first compute 1D diagonal array "C_diag" to place into broader C matrix:
+                    C_diag = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
+                    C_sub[i*nk:i*nk+nk,j*nk:j*nk+nk] = np.identity(nk) * C_diag # bed 1D array along diagonal of multipole permutation in C
+            C[ t0*nell*nk:(t0+1)*nell*nk, t1*nell*nk:(t1+1)*nell*nk ] = C_sub
+    return C
+
+### Full 2D P(k,mu) Fisher matrix - (without multipoles) ###
 def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI'):
     '''Compute full 2D anisotroic Fisher matrix for parameter set [theta]'''
 
@@ -45,8 +153,10 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI'):
 
     #global V_bin
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
-    V_bin = np.min([V_bin1,V_bin2])
+    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    if tracer=='1': V_bin = V_bin1
+    if tracer=='2': V_bin = V_bin2
+    if tracer=='X' or tracer=='MT':V_bin = np.min([V_bin1,V_bin2])
 
     ### define mu and k bins and their spacing:
     mu = np.linspace(-1,1,300)
@@ -61,14 +171,15 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI'):
     for i in range(Npar):
         for j in range(i,Npar):
             if tracer=='1' or tracer=='MT':
-                dPa_dm = dP_dtheta_stencil(kgrid,mugrid,theta_ids[i],tracer='1')
-                dPa_dn = dP_dtheta_stencil(kgrid,mugrid,theta_ids[j],tracer='1')
+                dPa_dm = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[i],tracer='1')
+                dPa_dn = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[j],tracer='1')
             if tracer=='2' or tracer=='MT':
-                dPb_dm = dP_dtheta_stencil(kgrid,mugrid,theta_ids[i],tracer='2')
-                dPb_dn = dP_dtheta_stencil(kgrid,mugrid,theta_ids[j],tracer='2')
+                dPb_dm = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[i],tracer='2')
+                dPb_dn = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[j],tracer='2')
             if tracer=='X' or tracer=='MT':
-                dPab_dm = dP_dtheta_stencil(kgrid,mugrid,theta_ids[i],tracer='X')
-                dPab_dn = dP_dtheta_stencil(kgrid,mugrid,theta_ids[j],tracer='X')
+                dPab_dm = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[i],tracer='X')
+                dPab_dn = dP_dtheta_stencil(kgrid,mugrid,0,theta_ids[j],tracer='X')
+
             F_k = np.zeros(len(k))
             for ki in range(len(k)):
                 F_mu = np.zeros(len(mu))
@@ -99,9 +210,8 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI'):
             F[j,i] = F[i,j] # fill in symmetric elements
     return F
 
-## Calculate the cross covariance between different power spectra.
-## !!! Pa and Pb should include shot noise !!!
 def cal_cov(Pa=0, Pab=0, Pb=0, tracer=None):
+    ## Pa and Pb should include noise
     if tracer=='1': cov = Pa*Pa
     if tracer=='2': cov = Pb*Pb
     if tracer=='X': cov = 0.5*(Pab*Pab + Pa*Pb)
@@ -118,118 +228,12 @@ def cal_cov(Pa=0, Pab=0, Pb=0, tracer=None):
         cov[2,2] = Pb * Pb
     return cov
 
-def dPell_dtheta(ells,k,theta_id,tau):
-    '''**** CHANGE THIS DESCRIPTION ******* Generic derivitive multipole function, specify ln derivtive parameter model with derivfunc
-        e.g. derivfunc = dlnP_dbHI for b_HI parameter'''
-    ntau,nell,nk = len(tau),len(ells),len(k)
-    mu = np.linspace(0,1,1000)
-    kgrid,mugrid = np.meshgrid(k,mu)
-    res = np.zeros((ntau,nell*nk))
-    subres = np.zeros((nell,nk))
-    for t in range(ntau):
-        for i,ell_i in enumerate(ells):
-            if theta_id==r'$A_{\rm BAO}$':
-                global f_BAO
-                f_BAO = f_BAO_ell[t,i]
-                integrand = (2*ell_i+1) * dlnP_dA(kgrid,mugrid,tau[t]) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t]) * Leg(ell_i)(mugrid)
-            else:
-                integrand = (2*ell_i+1) * dP_dtheta_stencil(kgrid,mugrid,theta_id,tau[t]) * Leg(ell_i)(mugrid)
-            ## Multiply by k so that 2 factors of deltaP/deltatheta in Fisher matrix picks up k^2 term.
-            subres[i] = k * scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
-        res[t] = np.ravel(subres)
-    return np.ravel(res)
-
-
-def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,ells,tracer):
-    '''Compute Fisher matrix for multipoles with parameter set [theta]'''
-
-    global z,Pmod,cosmopars,surveypars
-    Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
-    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
-
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
-    V_bin = np.min([V_bin1,V_bin2])
-
-    if tracer=='1': tau = ['1']
-    if tracer=='2': tau = ['2']
-    if tracer=='X': tau = ['X']
-    if tracer=='MT': tau = ['1','2','X']
-
-    ntau,nell,nk = len(tau),len(ells),len(k)
-
-    #'''
-    if r'$A_{\rm BAO}$' in theta_ids: # Only need to do if constraining A_BAO
-        global f_BAO_ell
-        f_BAO_ell = np.zeros((ntau,nell,len(k)))
-        for t in range(ntau):
-            for i,ell_i in enumerate(ells):
-                f_BAO_ell[t,i] = model.Pk_noBAO(model.P_ell(ell_i,k,Pmod,cosmopars,surveypars,tau[t]),k)[1]
-    #'''
-    dk = np.diff(k)
-    if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
-         print('\nError! - k-bins must be linearly spaced.'); exit()
-    dk = np.mean(dk) # reduce array to a single number
-    Npar = len(theta_ids)
-
-    Cinv = np.linalg.inv( Cov_ell(ells,k,Pmod,cosmopars,surveypars,tau) )
-    F = np.zeros((Npar,Npar)) # Full Fisher matrix summed over tracers
-    for i in range(Npar):
-        def deriv_i(k):
-            return dPell_dtheta(ells,k,theta_ids[i],tau)
-        for j in range(Npar):
-            if j>=i: # avoid calculating symmetric off-diagonals twice
-                def deriv_j(k):
-                    return dPell_dtheta(ells,k,theta_ids[j],tau)
-                # Sum over ell and integrate over k in one big matrix operation:
-                F[i,j] += dk * np.dot( np.dot( deriv_i(k).T,Cinv ) , deriv_j(k) )
-                '''
-                #### THIS LOOP GIVES IDENTICAL RESULT AS ABOVE DOT PRODUCT OPERATION #####
-                dPdth_i,dPdth_j = deriv_i(k),deriv_j(k)
-                for s0 in range(nell*ntau):
-                    for s1 in range(nell*ntau):
-                        F[i,j] += np.sum( dk * dPdth_i[s0*nk:(s0+1)*nk] * np.diag(Cinv[s0*nk:(s0+1)*nk,s1*nk:(s1+1)*nk]) * dPdth_j[s1*nk:(s1+1)*nk] )
-                '''
-            if j<i: F[i,j] = F[j,i]
-    F *= V_bin/(4*np.pi**2)
-    return F
-
-def Cov_ell(ells,k,Pmod,cosmopars,surveypars,tau):
-    ''' (n_ell * nk) X (n_ell * nk) multi-tracer [t1xt2] covariance matrix for multipoles where each
-    element integrates over mu '''
-    nell,nk = len(ells),len(k)
-    mu = np.linspace(0,1,1000)
-    kgrid,mugrid = np.meshgrid(k,mu)
-    ntau = len(tau)
-    C = np.zeros((ntau*nell*nk,ntau*nell*nk))
-    for t0 in range(ntau):
-        for t1 in range(ntau):
-            C_sub = np.zeros((nell*nk,nell*nk))
-            for i,ell_i in enumerate(ells):
-                for j,ell_j in enumerate(ells):
-                    # Get correct covariance matrix depending on tracer combination:
-                    if tau[t0]=='X' and tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * ( model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'X')**2 + model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'1')*model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,'2') )
-                    else:
-                        if tau[t0]==tau[t1]: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t0])**2
-                        else:
-                            if tau[t0]=='X' or tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t0]) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,tau[t1])
-                            else: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,'X')**2
-                            # below ~equivalent:
-                            #else: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tau[t0]) * model.P(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tau[t1])
-                    # Calculating k's along diagonal of each multipole permutation in C
-                    #  - first compute 1D diagonal array "C_diag" to place into broader C matrix:
-                    C_diag = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
-                    C_sub[i*nk:i*nk+nk,j*nk:j*nk+nk] = np.identity(nk) * C_diag # bed 1D array along diagonal of multipole permutation in C
-            C[ t0*nell*nk:(t0+1)*nell*nk, t1*nell*nk:(t1+1)*nell*nk ] = C_sub
-    return C
-
 def ContourEllipse(F,x,y,theta):
     ''' Calculate ellipses using Eq2 and 4 from https://arxiv.org/pdf/0906.4123.pdf'''
     # F: input Fisher matrix
     # (x,y): chosen indices for parameter pair in Fisher matrix to compute elipse for
     #C = np.linalg.inv(F)
     C = FisherInverse(F)
-
     Cxx,Cyy,Cxy = C[x,x],C[y,y],C[x,y]
     a = 2*np.sqrt( (Cxx + Cyy)/2 + np.sqrt( (Cxx - Cyy)**2/4 + Cxy**2 ) )
     b = 2*np.sqrt( (Cxx + Cyy)/2 - np.sqrt( (Cxx - Cyy)**2/4 + Cxy**2 ) )
@@ -251,10 +255,12 @@ def ContourEllipse(F,x,y,theta):
 
 #colors = ['tab:blue','tab:orange','tab:green','tab:red']
 #colors = ['tab:blue','grey','tab:orange','tab:red']
-def CornerPlot(Fs,theta,theta_labels,Flabels=None,ls=None,fontsize=14,legbox=[1.2,1.1]
-                ,colors=['tab:blue','tab:orange','tab:green','tab:red']):
+def CornerPlot(Fs,theta,theta_labels,Flabels=None,ls=None,lw=None,fontsize=14,param_fontsize=None,legbox=[1.2,1.1]
+                ,colors=['tab:blue','tab:orange','tab:green','tab:red'],doLegend=True,doTitle=True):
     if len(np.shape(Fs))==2: Fs = [Fs] # just one matrix provided.
-    if ls is None: ls = ['-','-','-','-','-','-','-','-','-','-','-',]
+    if ls is None: ls = ['-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-']
+    if lw is None: lw = 2
+    if param_fontsize is None: param_fontsize = fontsize + 2
     Npar = np.shape(Fs[0])[0]
     fig = plt.figure(figsize=(8,8))
     gs = GridSpec(Npar,Npar) # rows,columns
@@ -287,8 +293,8 @@ def CornerPlot(Fs,theta,theta_labels,Flabels=None,ls=None,fontsize=14,legbox=[1.
                 C = FisherInverse(F)
 
 
-                if i==(Npar-1): ax.set_xlabel(theta_labels[j],fontsize=fontsize+2)
-                if j==0: ax.set_ylabel(theta_labels[i],fontsize=fontsize+2)
+                if i==(Npar-1): ax.set_xlabel(theta_labels[j],fontsize=param_fontsize)
+                if j==0: ax.set_ylabel(theta_labels[i],fontsize=param_fontsize)
                 if i==j: # Plot Gaussian distribution for marginalised parameter estimate
                     sigma = np.sqrt(C[i,i])
                     if np.isnan(sigma):
@@ -296,21 +302,22 @@ def CornerPlot(Fs,theta,theta_labels,Flabels=None,ls=None,fontsize=14,legbox=[1.
                     xi = np.linspace(theta[i]-5*sigma, theta[i]+5*sigma, 200)
                     gauss = stats.norm.pdf(xi, theta[i], sigma)
                     gauss /= np.max(gauss) # normalise so max =1
-                    if Flabels is None: ax.plot(xi,gauss)
-                    else: ax.plot(xi,gauss,label=Flabels[Fi],color=colors[Fi],ls=ls[Fi])
+                    if Flabels is None: ax.plot(xi,gauss,lw=lw)
+                    else: ax.plot(xi,gauss,label=Flabels[Fi],color=colors[Fi],ls=ls[Fi],lw=lw)
                     ax.set_ylim(bottom=0,top=1.05)
                     ax.set_yticks([])
                     if theta[i]==0: title = theta_labels[i]+r'$=0\pm{:#.3g}$'.format(sigma)
                     else: title = r'$\sigma($'+theta_labels[i]+r'$)/$'+theta_labels[i]+r'$={:#.3g}$'.format(100*sigma/theta[i])+'%'
-                    ax.set_title(title,fontsize=fontsize)
+                    if doTitle==True: ax.set_title(title,fontsize=fontsize)
                     print( theta_labels[i]+r'$={:#.3g}\pm{:#.3g}$'.format( theta[i],sigma) )
                     if Fi==(len(Fs)-1):
-                        if i==0 and Flabels is not None: ax.legend(bbox_to_anchor=[legbox[0],legbox[1]],fontsize=fontsize,frameon=False,loc='upper left',handlelength=1,handletextpad=0.4)
+                        if i==0 and Flabels is not None:
+                            if doLegend==True: ax.legend(bbox_to_anchor=[legbox[0],legbox[1]],fontsize=fontsize,frameon=False,loc='upper left',handlelength=1,handletextpad=0.4)
                         ax.axvline(theta[i],color='grey',lw=0.5,zorder=-1)
                     continue
                 if F[i,j]!=0: # don't plot zero Fisher information infinite contours
                     ell_x,ell_y = ContourEllipse(F,i,j,theta)
-                    ax.plot(ell_x,ell_y,color=colors[Fi],ls=ls[Fi])
+                    ax.plot(ell_x,ell_y,color=colors[Fi],ls=ls[Fi],lw=lw)
                 ax.axvline(theta[j],color='grey',lw=0.5,zorder=-1)
                 ax.axhline(theta[i],color='grey',lw=0.5,zorder=-1)
 
@@ -333,24 +340,137 @@ def FisherInverse(F):
     C[F!=0] = np.ravel(Cnz)
     return C
 
-############################################
-####### LEGACY CODE NO LONGER USED: ########
-############################################
+# ---------- 5-point stencil stability tooling ----------
+from contextlib import contextmanager
 
-'''
-### Analytical derivitives:
-def dlnP_dTbar(k,mu,tracer):
-    if tracer=='HI': return 2 / model.Tbar(z,Omega_HI)
-    if tracer=='g': return 0
-    if tracer=='X': return 1 / model.Tbar(z,Omega_HI)
-def dlnP_db1(k,mu,tracer):
-    if tracer=='1': return 2 / (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))
-    if tracer=='2': return 0
-    if tracer=='X': return 1 / (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))
-def dlnP_df(k,mu,tracer):
-    if tracer=='1': return 2*mu**2 / (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))
-    if tracer=='2': return 2*mu**2 / (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))
-    if tracer=='X': return 2*mu**2 / (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1)) + 2*mu**2 / (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))
-def dlnP_dA(k,mu,tracer):
-    return f_BAO/(1+A*f_BAO)
-'''
+@contextmanager
+def _use_epsilon(temp_eps):
+    """Temporarily set the global epsilon used by dP_dtheta_stencil."""
+    global epsilon
+    _old = epsilon
+    epsilon = float(temp_eps)
+    try:
+        yield
+    finally:
+        epsilon = _old
+
+def _deriv_vector(theta_id, ells, k, mu, tracer):
+    """
+    Build the same derivative vector your Fisher uses:
+    concatenate dP_ell/dtheta over all ells and k (after integrating over mu).
+    """
+    out = []
+    for ell in ells:
+        # this matches how you build Fisher: integrate over mu then keep k-dependence
+        integrand = dP_dtheta_stencil(k, mu, ell, theta_id, tracer)  # shape (len(mu), len(k))
+        dPell = scipy.integrate.simps(integrand, mu, axis=0)         # -> (len(k),)
+        out.append(np.ravel(dPell))
+    return np.concatenate(out)  # shape (n_ell * n_k,)
+
+def check_stencil_convergence(theta_id, ells, k, tracer, Pmod_, cosmopars_, surveypars_,
+                              eps_grid=(2e-1, 1e-1, 5e-2, 2e-2, 1e-2, 5e-3, 2e-3, 1e-3),
+                              #eps_grid=(1e-1, 5e-2, 2e-2, 1e-2, 5e-3, 2e-3, 1e-3),
+                              tol_rel=1e-2):
+    """
+    Scan eps_grid, compute derivative vectors, and report:
+      - aim for tol_rel (relative tolerance) default 1e-2 i.e. 1%.
+           [means numerical derivitive is statble to within 1% when step size is halved]
+           So the “recommended ε” is the largest step for which halving ε changes the derivative vector by <1%
+      - ||Δ||/||D|| when halving ε,
+    Returns a dict with results and a suggested epsilon.
+    """
+    global z,Pmod,cosmopars,surveypars
+    Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
+    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
+    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    if tracer=='1': V_bin = V_bin1
+    if tracer=='2': V_bin = V_bin2
+    if tracer=='X' or tracer=='MT': V_bin = V_binX
+
+    if tracer=='1': tau = ['1']
+    if tracer=='2': tau = ['2']
+    if tracer=='X': tau = ['X']
+    if tracer=='MT': tau = ['1','2','X']
+
+    mu = np.linspace(0,1,1000)
+    kgrid,mugrid = np.meshgrid(k,mu)
+    ntau,nell,nk = len(tau),len(ells),len(k)
+
+
+    results = {}
+    for eps in eps_grid:
+        with _use_epsilon(eps):
+            D = _deriv_vector(theta_id, ells, kgrid, mugrid, tracer)
+        results[eps] = D
+
+    # Compare successive pairs (eps -> eps/2)
+    rows = []
+    keys = list(results.keys())
+    for i in range(len(keys)-1):
+        e_big, e_small = keys[i], keys[i+1]
+        D_big, D_small = results[e_big], results[e_small]
+        # global relative change
+        rel = np.linalg.norm(D_small - D_big) / max(1.0, np.linalg.norm(D_small))
+        # elementwise robust statistic
+        with np.errstate(divide='ignore', invalid='ignore'):
+            rel_elem = np.abs((D_small - D_big) / np.where(np.abs(D_small)>0, np.abs(D_small), 1.0))
+        med_rel = np.median(rel_elem)
+        max_rel = np.max(rel_elem)
+        rows.append((e_big, e_small, rel, med_rel, max_rel))
+
+    '''
+    # Check 1/16 behaviour (truncation error ∝ ε^4)
+    R = []
+    for i in range(len(keys)-2):
+        e1, e2, e3 = keys[i], keys[i+1], keys[i+2]
+        d12 = np.linalg.norm(results[e2] - results[e1])
+        d23 = np.linalg.norm(results[e3] - results[e2])
+        ratio = d23 / d12 if d12 != 0 else np.nan
+        R.append((e1, e2, e3, ratio))
+
+    # Pick recommended epsilon: the largest ε where rel < tol_rel
+    recommended = None
+    for (e_big, e_small, rel, med_rel, max_rel) in rows:
+        if rel < tol_rel and med_rel < 2*tol_rel:
+            recommended = e_small  # we accept the smaller one in the pair
+            break
+    if recommended is None:
+        # fall back to the smallest scanned ε
+        recommended = keys[-1]
+    '''
+
+    # Print a concise report
+    print(f"\nStencil stability for {theta_id}: ells={ells}, n_k={len(k)}, n_mu={len(mu)}")
+    print("Δ when halving ε  ->  ||Δ||/||D||   median(|Δ/D|)   max(|Δ/D|)")
+    #'''
+    for (e_big, e_small, rel, med_rel, max_rel) in rows:
+        print(f"  {e_big:8.2e} → {e_small:8.2e} :  {rel:9.3e}   {med_rel:12.3e}   {max_rel:11.3e}")
+    '''
+    print(f"\nSuggested ε for {theta_id}: {recommended:.3e} (tol_rel={tol_rel})")
+    return {
+        "eps_grid": keys,
+        "D": results,
+        "pairs": rows,
+        "ratios": R,
+        "recommended": recommended,
+    }
+    '''
+    return
+
+def derivative_richardson(theta_id, ells, k, tracer,
+                          mu=np.linspace(0.0, 1.0, 201),
+                          eps=1e-2):
+    """
+    5-point stencil is O(ε^4). Richardson-extrapolate with ε and ε/2 to get O(ε^6):
+      D_extrap = (16 D(ε/2) - D(ε)) / 15
+    Also return an internal error estimate err ≈ |D_extrap - D(ε/2)|.
+    """
+    with _use_epsilon(eps):
+        D1 = _deriv_vector(theta_id, ells, k, mu, tracer)
+    with _use_epsilon(eps/2):
+        D2 = _deriv_vector(theta_id, ells, k, mu, tracer)
+    D_extrap = (16.0*D2 - D1) / 15.0
+    err = np.abs(D_extrap - D2)
+    return D_extrap, err
+# -------------------------------------------------------

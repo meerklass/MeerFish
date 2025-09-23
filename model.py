@@ -6,6 +6,7 @@ from scipy import integrate
 from scipy.special import legendre as Leg
 v_21cm = 1420.405751#MHz
 c_km = 299792.458 #km/s
+import survey
 
 def Red2Freq(z):
     # Convert redshift to frequency for HI emission (freq in MHz)
@@ -38,7 +39,7 @@ def get_param_selection(ids):
     Npar = len(ids)
     for i in range(Npar):
         if ids[i]==r'$\overline{T}_{\rm HI}$': theta_select.append(0)
-        if ids[i]==r'$\overline{T}_{\rm HI}$': theta_select.append(1)
+        if ids[i]==r'$\overline{T}_2$': theta_select.append(1)
         if ids[i]==r'$b_1$': theta_select.append( 2 )
         if ids[i]==r'$b_2$': theta_select.append( 3 )
         if ids[i]==r'$b^\phi_1$': theta_select.append( 4 )
@@ -64,11 +65,16 @@ def b_HI(z):
     A,B,C = 0.84178571,0.69289286,-0.04589286
     return A + B*z + C*z**2
 
-def OmegaHI(z):
+def OmegaHI(z,SKAORedBook=False):
     ''' HI density parameter '''
-     # Matches SKAO red book and Alkistis early papers also consistent with GBT
-     #   Masui + Wolz measurements at z=0.8
-    return 0.00048 + 0.00039*z - 0.000065*z**2
+    if SKAORedBook==True:
+         # Matches SKAO red book and Alkistis early papers also consistent with GBT
+         #   Masui + Wolz measurements at z=0.8
+        return 0.00048 + 0.00039*z - 0.000065*z**2
+    if SKAORedBook==False:
+        # Shift first coeficient parameter (of Red Book model) to increase amplitude of
+        #   whole spectrum so that it is more in line with recent measurements in WiggleZ-cross
+        return 0.00067432 + 0.00039*z - 0.000065*z**2
 
 def Tbar(z,Omega_HI):
     ''' Mean HI temperature [Units of mK] '''
@@ -91,60 +97,39 @@ def P_SN(z):
     A,B,C,D,E = 104.76587301587332, 81.77513227513245, -87.78472222222258, 23.393518518518654, -1.9791666666666783
     return A + B*z + C*z**2 + D*z**3 + E*z**4
 
-def P_N(z,zmin,zmax,A_sky,t_tot,N_dish,T_sys=None,A_pix=0.3**2,deltanu=0.2,epsilon=1):
-    ''' model for the noise power spectrum '''
+def P_N(z,A_sky,t_tot,N_dish,T_sys=None,A_pix=None,theta_FWHM=None,deltanu=0.2,epsilon=1,return_sigma=False):
+    ''' model for radio thermal noise power spectrum '''
+    ## This is (and should be) insensitive to choice of pixel area for the output
+    ##   noise power, since 1/A_pix appears in radiometer but then cancelled by
+    ##   A_pix in the volume factor of P_N. It changes output sigma_N though.
+    ##   Same for delta_nu however n_chunk channels can be combined to increase
+    ##   deltanu but then the t_obs also increases by n_chunk impacts the radiometer
     if t_tot is None: return 0 # no noise input
+    deltanu_Hz = 1e6*deltanu # MHz -> Hz
+    t_tot_sec = t_tot * 60 * 60 # Convert observing hours to seconds
     nu = Red2Freq(z)
-    nu1 = nu - deltanu # Use to calculate frequency channel width in Mpc/h for pixel volume
+    if A_pix is None:
+        pix_size = theta_FWHM / 3 # [deg] based on MeerKAT pilot survey approach
+        A_pix = pix_size**2 # Area covered in each pointing (related to beam size - equation formed by Steve)
+    V_cell = survey.Vsur(Freq2Red(nu+deltanu/2),Freq2Red(nu-deltanu/2),A_pix)
     if T_sys is None: # Calculate based on SKA red book eq1: https://arxiv.org/pdf/1811.02743.pdf
         Tspl = 3e3 #mK
         TCMB = 2.73e3 #mk
-        Tgal = 25e3*(408/nu)**2.75
-        #Trx = 15e3 + 30e3*(nu/1e3 - 0.75)**2 # From Red Book
-        Trx = 7.5e3 + 10e3*(nu/1e3 - 0.75)**2 # Amended from above to better fit Wang+20 MK Pilot Survey
+        Tgal = 15e3*(408/nu)**2.75 # tuned to fit PySM with a cut at Dec<|10deg| galactic latitudes
+        Trx = 7.5e3 + 10e3*(nu/1e3 - 0.75)**2 # Amended to fit Wang+20 MK Pilot Survey
         T_sys = Trx + Tspl + TCMB + Tgal
-    deltanu = deltanu * 1e6 # Convert MHz to Hz
-    t_tot = t_tot * 60 * 60 # Convert observing hours to seconds
     N_p = A_sky / A_pix # Number of pointings[or pixels]
-    t_p = N_dish * t_tot / N_p  # time per pointing
-    sigma_N = T_sys / (epsilon * np.sqrt(2 * deltanu * t_p) ) # Santos+15 eq 5.1
-
-    #### CURRENTLY FIXING DISTANCES FOR FIDUCIAL COSMOLOGY: ####
-    d_c = cosmo.D_com(z)
-    delta_lz = cosmo.D_com(Freq2Red(nu1)) - d_c
-    ############################################################
-
-    pix_area = (d_c * np.radians(np.sqrt(A_pix)) )**2 # [Mpc/h]^2 based on fixed pixel size in deg
-    V_cell = pix_area * delta_lz
+    t_p = N_dish * t_tot_sec / N_p  # time per pointing
+    sigma_N = T_sys / (epsilon * np.sqrt(2 * deltanu_Hz * t_p) ) # Santos+15 eq 5.1
     P_N = V_cell * sigma_N**2
-    return P_N
-
-def B_beam(mu,k,z,theta_FWHM,cosmopars):
-    ''' Gaussian beam model '''
-    if theta_FWHM==0: return 1
-    sig_beam = theta_FWHM/(2*np.sqrt(2*np.log(2))) # in degrees
-    d_c = cosmo.D_com(z,cosmopars) # Comoving distance to frequency bin
-    R_beam = d_c * np.radians(sig_beam) #Beam size [Mpc/h]
-    return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
-
-def B_zerr(mu,k,sigma_z,z,a_para=1):
-    ### from eq 12: https://arxiv.org/pdf/2305.00404.pdf
-    if sigma_z==0: return 1
-    #Sigma_z = a_para * c_km * sigma_z / cosmo.H(z)
-    Sigma_z = c_km * sigma_z / cosmo.H(z)
-    return np.exp(-k**2*mu**2*Sigma_z**2/2)
-
-def APpars(k_f,mu_f,a_perp,a_para):
-    F_AP = a_para/a_perp
-    k = k_f/a_perp * np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
-    mu = mu_f/F_AP / np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
-    return k,mu
+    if return_sigma==False: return P_N
+    else: return sigma_N,P_N
 
 def P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
     ''' 2D signal model for power spectrum '''
     ### _f subscripts mark the "measured" parameters based on fiducial cosmology assumed
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
-    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
     k,mu = APpars(k_f,mu_f,a_perp,a_para)
     alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
     if tracer=='1': return alpha_v * Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM1,cosmopars)**2 * B_zerr(mu,k,sigma_z1,z,a_para)**2
@@ -153,14 +138,10 @@ def P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
 
 def P_obs(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
     ''' 2D observational power spectrum with noise components'''
-    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
-
-    #alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
-    alpha_v = 1 # Not include for noise term in Euclid prep paper
-
-    if tracer=='1': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) +  alpha_v * P_N1
-    if tracer=='2': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) +  alpha_v * P_N2
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    alpha_v = 1 # Not including on noise term, as in Euclid prep paper
+    if tracer=='1': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) + alpha_v * P_N1
+    if tracer=='2': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer) + alpha_v * P_N2
     if tracer=='X': return P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer)
 
 def P_ell(ell,k,Pmod,cosmopars,surveypars,tracer):
@@ -182,39 +163,24 @@ def integratePkmu(Pfunc,ell,k,Pmod,cosmopars,surveypars,tracer):
 ###### CHECK P_err and P_ell_err functions - coded quickly ######################
 ################################################################################################
 def Nmodes(k,mu,V_bin):
-    '''
-    NOT WORKING - GIVING SMALL NUMBERS
-    '''
+    # leave out dmu term from standard definition otherwise its double counted
+    #    in scipy.integrate.simps integral over mu when obtaining P_ell error
     dk = np.mean(np.diff(k[0,:]))
-    dmu = np.mean(np.diff(mu[:,0]))
-    print(dk)
-    print(dmu)
-    print(V_bin)
-    return k**2*dk*dmu*V_bin / (8*np.pi**2)
+    return k**2*dk*V_bin / (8*np.pi**2)
 
 def P_err(k,mu,z,Pmod,cosmopars,surveypars,tracer):
     P_obs_ = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer)
-
-    z,V_bin1,V_bin2,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
-    '''
-    if tracer=='1' or tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin))
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    if tracer=='1': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin1))
+    if tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin2))
     if tracer=='X':
         P_1 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='1')
         P_2 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='2')
-        return np.sqrt( 1/(2*Nmodes(k,mu,V_bin)) * (P_obs_**2 + P_1*P_2) )
-    '''
-    dk = np.mean(np.diff(k[0,:]))
-    if tracer=='1': return np.sqrt( 2*(2*np.pi)**3/V_bin1 * 1/(4*np.pi*k**2*dk) ) * P_obs_
-    if tracer=='2': return np.sqrt( 2*(2*np.pi)**3/V_bin2 * 1/(4*np.pi*k**2*dk) ) * P_obs_
-    if tracer=='X':
-        V_binX = np.min([V_bin1,V_bin2])
-        P_1 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='1')
-        P_2 = P_obs(k,mu,Pmod,cosmopars,surveypars,tracer='2')
-        return np.sqrt( (2*np.pi)**3/V_binX * 1/(4*np.pi*k**2*dk) ) * np.sqrt(P_obs_**2 + P_1*P_2)
+        return np.sqrt( 1/(2*Nmodes(k,mu,V_binX)) * (P_obs_**2 + P_1*P_2) )
 
 def P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,tracer):
     ''' Integrate error model over mu into multipole ell '''
-    return (2*ell + 1)**2 * integratePkmu_err(P_err,ell,k,z,Pmod,cosmopars,surveypars,tracer)
+    return np.sqrt( (2*ell + 1)**2 * integratePkmu_err(P_err,ell,k,z,Pmod,cosmopars,surveypars,tracer) )
 
 ################################################################################################
 ################################################################################################
@@ -222,8 +188,57 @@ def integratePkmu_err(Pfunc,ell,k,z,Pmod,cosmopars,surveypars,tracer):
     '''integrate given Pfunc(k,mu) over mu with Legendre polynomial for given ell'''
     mu = np.linspace(0,1,1000)
     kgrid,mugrid = np.meshgrid(k,mu)
-    Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tracer) * Leg(ell)(mugrid)
+    Pkmu = Pfunc(kgrid,mugrid,z,Pmod,cosmopars,surveypars,tracer)**2 * Leg(ell)(mugrid)**2
     return scipy.integrate.simps(Pkmu, mu, axis=0) # integrate over mu axis (axis=0)
+
+def B_beam(mu,k,z,theta_FWHM,cosmopars):
+    ''' Gaussian beam model '''
+    if theta_FWHM==0: return 1
+    sig_beam = theta_FWHM/(2*np.sqrt(2*np.log(2))) # in degrees
+    d_c = cosmo.D_com(z,cosmopars) # Comoving distance to frequency bin
+    R_beam = d_c * np.radians(sig_beam) #Beam size [Mpc/h]
+    return np.exp( -(1-mu**2)*k**2*R_beam**2/2 )
+
+def B_zerr(mu,k,sigma_z,z,a_para=1):
+    ### from eq 12: https://arxiv.org/pdf/2305.00404.pdf
+    if sigma_z==0: return 1
+    #Sigma_z = a_para * c_km * sigma_z / cosmo.H(z)
+    Sigma_z = c_km * sigma_z / cosmo.H(z)
+    return np.exp(-k**2*mu**2*Sigma_z**2/2)
+
+def B_chan(mu,k,z,delta_nu=0):
+    ### from eq 41: https://arxiv.org/pdf/1902.07439
+    if delta_nu==0: return 1
+    s_para = c_km/cosmo.H(z) * (1+z)**2 * delta_nu/v_21cm
+    k_para = k*mu
+    k_para[k_para==0] = 1e-30
+    return np.sin(k_para*s_para/2) / (k_para*s_para/2)
+
+def APpars(k_f,mu_f,a_perp,a_para):
+    F_AP = a_para/a_perp
+    k = k_f/a_perp * np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
+    mu = mu_f/F_AP / np.sqrt( 1 + mu_f**2*(F_AP**(-2)-1) )
+    return k,mu
+
+def P_1D(k_f,mu_f,Pmod,cosmopars,surveypars,tracer):
+    '''
+    UNDER DEVELOPMENT - NOT WORKING!!
+    '''
+    P3D = P(k_f,mu_f,Pmod,cosmopars,surveypars,tracer)
+    k_para = k_f*mu_f
+    k_perp = k_f*np.sqrt(1-mu_f**2)
+    nbins = 30
+    # Choose bins in k_para
+    kpara_bins = np.linspace(k_para.min(), k_para.max(), nbins+1)
+    kpara_centers = 0.5*(kpara_bins[1:] + kpara_bins[:-1])
+    P1D = np.zeros(nbins)
+    for i in range(nbins):
+        mask = (k_para >= kpara_bins[i]) & (k_para < kpara_bins[i+1])
+        if np.any(mask):
+            integrand = P3D[mask] * np.abs(k_perp[mask])
+            P1D[i] = scipy.integrate.simps(integrand, k_perp[mask], axis=0) # integrate over mu axis (axis=0)
+    return kpara_centers, P1D
+
 
 def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]):
     """ Code from Ze - following Phil Bull method (https://arxiv.org/pdf/1405.1452.pdf)
