@@ -23,6 +23,6 @@ that you cite this repository [https://github.com/stevecunnington/MeerFish] and 
 ## Contact:
 
 For any questions or comments please contact:<br/>
-**Steve Cunnington** [steven.cunnington@manchester.ac.uk]
+**Steve Cunnington** [steve.cunnington@port.ac.uk]
 
 Feel free to contact for any comments, suggestions, or bug reports or please open a **New issue** from the Issues tab.
