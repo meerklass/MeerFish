@@ -83,6 +83,14 @@ def Tbar(z,Omega_HI):
     h = H0/100
     return 180 * Omega_HI * h * (1+z)**2 / (Hz/H0)
 
+def get_kbins(z,zmin,zmax,A_sky,kmax=0.3):
+    k_perp_min = np.pi / cosmo.D_ang(A_sky,z)
+    k_para_min = np.pi / (cosmo.D_com(zmax)-cosmo.D_com(zmin))
+    kmin = np.min([k_perp_min,k_para_min])
+    kbins = np.arange(kmin,kmax,kmin)
+    k = (kbins[1:] + kbins[:-1])/2 #centre of k bins
+    return k,kbins,kmin,kmax
+
 def P_SN(z):
     ''' HI shot noise '''
     '''Use 6 values for HI shot noise at redshifts 0 to 5 found in Table 5 of

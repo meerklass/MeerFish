@@ -43,7 +43,7 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False):
         Tbar1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z))
         Tbar2 = 1
         b1 = meerfish_model.b_HI(z)
-        b2 = z + 1
+        b2 = 1 + z
         bphi1 = b_phi_universality(b1)
         bphi2 = b_phi_universality(b2)
         f_ = f(z)
@@ -272,7 +272,6 @@ def fsigma8_mu0(z_array, mu0, a_init=1e-3, return_D=False):
 
     f_sigma8 = []
     for z in z_array:
-        print(z)
         a = 1.0 / (1.0 + z)
         f_val = f_interp(a)
         D_val = D_interp(a)

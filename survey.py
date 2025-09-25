@@ -103,6 +103,20 @@ def params(Survey1='MK_UHF',Survey2=None,A_skyX=None,zminzmax=None,f_tobsloss=0,
         Ngal = Ngal_per_deg2 * A_skys[-1]
         nbar = Ngal / Vsur(zmins[-1],zmaxs[-1],A_skys[-1])
         ########################################
+    elif Survey1=='Rubin' or Survey2=='Rubin':
+        if zminzmax==None: zmins.append(0.3);zmaxs.append(3)
+        else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
+        A_skys.append(18000) # area in sq.deg
+        Ngal_per_deg2 = 198000
+        Ngal = Ngal_per_deg2 * A_skys[-1]
+        nbar = Ngal / Vsur(zmins[-1],zmaxs[-1],A_skys[-1])
+    elif Survey1=='Rubin_early' or Survey2=='Rubin_early': # as above just with half the number density and 10,000deg2
+        if zminzmax==None: zmins.append(0.3);zmaxs.append(3)
+        else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
+        A_skys.append(10000) # area in sq.deg
+        Ngal_per_deg2 = 198000/2
+        Ngal = Ngal_per_deg2 * A_skys[-1]
+        nbar = Ngal / Vsur(zmins[-1],zmaxs[-1],A_skys[-1])
     ### Set cosmology:
     if len(zmins)==1: zmins.append(zmins[0]) # assume same zmin in second survey if none specified
     if len(zmaxs)==1: zmaxs.append(zmaxs[0]) # assume same zmax in second survey if none specified
