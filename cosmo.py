@@ -43,8 +43,9 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False):
         Tbar1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z))
         Tbar2 = 1
         b1 = meerfish_model.b_HI(z)
-        b2 = 1 + z
-        bphi1 = b_phi_universality(b1)
+        b2 = 1 + 0.84*z # Assumes LSST/Rubin bias [from https://arxiv.org/pdf/0912.0201]
+        #bphi1 = b_phi_universality(b1)
+        bphi1 = b_phi_HI(z)
         bphi2 = b_phi_universality(b2)
         f_ = f(z)
         a_perp = 1
@@ -65,15 +66,15 @@ def b_phi_universality(b1):
 def b_phi_HI(z):
     '''Interpolated from Alex Barriera paper: https://iopscience.iop.org/article/10.1088/1475-7516/2022/04/057/pdf'''
     #### Code for finding polynomial coeficients: #####
-    '''
-    z = np.array([0,0.5,1,2,3])
+    #'''
+    z_sim = np.array([0,0.5,1,2,3]) # redshift bins used in Barreira
     b_phi = np.array([-1.7, -0.44, 0.47, 2.39, 3.82]) # From TNG100
     #b_phi = np.array([-1.76, -1.40, -0.26, 2.08, 1.98]) # From TNG300
-    coef = np.polyfit(z, b_phi,2)
+    coef = np.polyfit(z_sim, b_phi,2)
     A,B,C = coef[2],coef[1],coef[0]
-    '''
+    #'''
     ###################################################
-    A,B,C = -1.673166311300638,2.4020042643923234,-0.18997867803837928
+    #A,B,C = -1.673166311300638,2.4020042643923234,-0.18997867803837928
     return A + B*z + C*z**2
 
 def E(z):
@@ -201,15 +202,8 @@ def MatterPk(z,kmin=1e-5,kmax=10,NonLinear=False):
     T = interp1d(k_trans, transfer_func) # Transfer function - set to global variable
     return interp1d(k,pk[0],kind='cubic')
 
-
-###########################  CHECK!  ##########################################
-# ----------------------
-# Modified gravity approximations of fsigma8 parameterised  by \mu following ChatGPT
-# ----------------------
-###############################################################################
-# ----------------------
+### Modified gravity approximations of fsigma8 parameterised  by \mu
 # Background functions
-# ----------------------
 def E_of_a(a):
     return np.sqrt(Om0 * a**-3 + Omega_L0)
 
@@ -226,9 +220,8 @@ def Omega_DE_ratio(a):
 
 def mu_of_a(a, mu0):
     return 1.0 + mu0 * Omega_DE_ratio(a)
-# ----------------------
+
 # Growth ODE integration
-# ----------------------
 def fsigma8_mu0(z_array, mu0, a_init=1e-3, return_D=False):
     global Omega_L0
     Omega_L0 = 1.0 - Om0  # flat universe
@@ -278,6 +271,4 @@ def fsigma8_mu0(z_array, mu0, a_init=1e-3, return_D=False):
         sigma8_z = sigma_8(z)
         f_sigma8.append(f_val * sigma8_z)
     return np.array(f_sigma8)
-###############################################################################
-###############################################################################
 ###############################################################################
