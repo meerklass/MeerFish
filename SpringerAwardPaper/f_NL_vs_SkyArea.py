@@ -2,12 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 sys.path.insert(1,'/Users/user/Documents/MeerFish')
-sys.path.insert(1,'/Users/user/Documents/FullSkyIM')
-import init
 import cosmo
 import model
 import fisher
 import survey
+
+### For nice plots:
+import matplotlib
+matplotlib.rcParams['mathtext.fontset'] = 'stix'
+matplotlib.rcParams['font.family'] = 'STIXGeneral'
+import mpl_style
+plt.style.use(mpl_style.style1)
 
 ells = [0,2,4]
 theta_ids = [\
@@ -45,28 +50,37 @@ if Survey=='SKAO':
     zminzmax = [1.5,3]
 z,zmin1,zmin2,zmax1,zmax2,A_sky1,A_sky2,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,t_tot,N_dish,sigma_z1,sigma_z2,P_N,nbar = survey.params(Survey1=Survey1_arg,Survey2=Survey2_arg,zminzmax=zminzmax,f_tobsloss=f_tobsloss)
 surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+dbeam,dsys,dphotoz = 0,0,0
+nuispars = dbeam,dsys,dphotoz
+
 ### Cosmological parameters and kbins:
 cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
+
+Tbar1,Tbar2,b1,b2,bphi1,bphi2,f_,a_perp,a_para,A_BAO,f_NL = cosmopars
+#b2 = 1 + z
+#bphi2 = cosmo.b_phi_universality(b2)
+#bphi1 = cosmo.b_phi_HI(z)
+#bphi1 = cosmo.b_phi_universality(b1)
+cosmopars = np.array([Tbar1,Tbar2,b1,b2,bphi1,bphi2,f_,a_perp,a_para,A_BAO,f_NL])
+
 Pmod = cosmo.MatterPk(z)
 k,kbins,kmin,kmax = model.get_kbins(z,zmin1,zmax1,A_sky1)
 theta = model.get_param_vals(theta_ids,z,cosmopars)
-F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='1')
+F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='1')
 fisher.CornerPlot(F,theta,theta_ids)
-F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='2')
+#F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='2')
+#fisher.CornerPlot(F,theta,theta_ids)
+F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='MT')
 fisher.CornerPlot(F,theta,theta_ids)
-F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='MT')
-fisher.CornerPlot(F,theta,theta_ids)
-#plt.show()
+plt.show()
 exit()
 '''
 
-'''
+#'''
+##### Run to save results **[need to run for both Survey choices]** ###########
 Fs1,Fs2,FsMT = [],[],[]
 for i in range(len(A_skys)):
     print(i,A_skys[i])
-    #deltanu_target = 1
-    #if Survey=='SKAO': k,Pmod,z,surveypars,cosmopars = init.Multi_tracer_surveys(zmin=1.5,zmax=3,A_sky=A_skys[i],deltanu_target=deltanu_target)
-    #if Survey=='MeerKLASS': k,Pmod,z,surveypars,cosmopars = init.Multi_tracer_surveys(zmin=0.4,zmax=1.45,MeerKLASS=True,A_sky=A_skys[i],deltanu_target=deltanu_target)
     if Survey=='MeerKLASS':
         Survey1_arg = 'MK_UHF'
         Survey2_arg = 'Rubin_early'
@@ -88,9 +102,9 @@ for i in range(len(A_skys)):
     Pmod = cosmo.MatterPk(z)
     k,kbins,kmin,kmax = model.get_kbins(z,zmin1,zmax1,A_sky1)
 
-    Fs1.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='1') )
-    Fs2.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='2') )
-    FsMT.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='MT') )
+    Fs1.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='1') )
+    Fs2.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='2') )
+    FsMT.append( fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='MT') )
 
     Flabels = ['HI','gal','MT']
     Fs = [Fs1[0],Fs2[0],FsMT[0]]
@@ -101,7 +115,7 @@ for i in range(len(A_skys)):
 
 np.save('/Users/user/Documents/MeerFish/SpringerAwardPaper/data/Fisher_Asky_%s'%Survey,[Fs1,Fs2,FsMT])
 #exit()
-'''
+#'''
 colors = ['tab:blue','tab:orange','tab:green']
 
 theta_ids[0] = r'$f(z)$'
@@ -128,6 +142,7 @@ def DoPlot(Survey):
     if Survey=='SKAO': a0.axvline(nom_Area,color='tab:purple',ls='--')
     tabledata = np.zeros((3,np.shape(C)[1]))
     for i in range(np.shape(Fs)[-1]):
+        #if i==1: continue # skip H(z)
         if Survey=='MeerKLASS': a0.plot(A_skys,np.sqrt(C_nom[i,i]) / np.sqrt(C[:,i,i]),label=theta_ids[i],color=colors[i])
         if Survey=='SKAO': a0.plot(A_skys,np.sqrt(C_nom[i,i]) / np.sqrt(C[:,i,i]),color=colors[i],lw=1)
         print(theta_ids[i])

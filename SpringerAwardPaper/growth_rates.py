@@ -2,20 +2,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 sys.path.insert(1,'/Users/user/Documents/MeerFish')
-sys.path.insert(1,'/Users/user/Documents/FullSkyIM')
-import init
 import cosmo
 import model
 import fisher
 import survey
+
+### For nice plots:
+import matplotlib
+matplotlib.rcParams['mathtext.fontset'] = 'stix'
+matplotlib.rcParams['font.family'] = 'STIXGeneral'
+import mpl_style
+plt.style.use(mpl_style.style1)
 
 epsilon = 0.5 # fraction of total observation time kept (i.e. not lost to RFI)
 f_tobsloss = 1-epsilon
 
 ells = [0,2,4]
 theta_ids = [\
-    r'$\overline{T}_{\rm HI}$',\
-    #r'$b_1$',\
+    #r'$\overline{T}_{\rm HI}$',\
+    r'$b_1$',\
     #r'$b_2$',\
     #r'$b^\phi_1$',\
     #r'$b^\phi_2$',\
@@ -36,8 +41,10 @@ for i in range(len(zbins)-1):
     ### Full MeerKLASS survey at each z-bin:
     Survey = 'MK_UHF'
     zminzmax = [zbins[i],zbins[i+1]]
-    z,zmin1,zmin2,zmax1,zmax2,A_sky1,A_sky2,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,t_tot,N_dish,sigma_z1,sigma_z2,P_N,nbar = survey.params(Survey1=Survey,zminzmax=zminzmax,f_tobsloss=epsilon)
+    A_sky = None # None is default
+    z,zmin1,zmin2,zmax1,zmax2,A_sky1,A_sky2,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,t_tot,N_dish,sigma_z1,sigma_z2,P_N,nbar = survey.params(Survey1=Survey,A_sky1=A_sky,zminzmax=zminzmax,f_tobsloss=epsilon)
     surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
@@ -50,7 +57,20 @@ for i in range(len(zbins)-1):
     f_err.append(np.sqrt(C[1,1]))
     sigma_8.append(cosmo.sigma_8())
     zs.append(z)
-zs = np.array(zs)
+
+    '''
+    #### Hack test to see contribution from non-linear modes:
+    print((np.array(f_err)/np.array(f))*100) # percent constraints
+    kcut = 0.15 # assume all modes above this non-linear and cut
+    k = k[k<kcut]
+    F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='1')
+    C = fisher.FisherInverse(F)
+    print((np.sqrt(C[1,1])/theta[1])*100) # percent constraints
+    print( (np.sqrt(C[1,1])/theta[1]) / (np.array(f_err)/np.array(f)) ) # gain from non-linear mode inclusion
+    exit()
+    '''
+
+f,f_err,sigma_8,zs = np.array(f),np.array(f_err),np.array(sigma_8),np.array(zs)
 np.save('/Users/user/Documents/MeerFish/SpringerAwardPaper/data/f_z.npy',[f,f_err,sigma_8,zs])
 #'''
 plt.figure(figsize=(6,4))
