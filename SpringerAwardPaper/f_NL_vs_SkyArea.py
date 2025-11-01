@@ -29,8 +29,8 @@ theta_ids = [\
     ]
 
 
-#Survey = 'SKAO'
-Survey = 'MeerKLASS'
+Survey = 'SKAO'
+#Survey = 'MeerKLASS'
 
 epsilon = 0.5 # fraction of total observation time kept (i.e. not lost to RFI)
 f_tobsloss = 1-epsilon
@@ -97,6 +97,8 @@ for i in range(len(A_skys)):
     V_binX = survey.Vsur(np.max([zmin1,zmin2]),np.min([zmax1,zmax2]),A_sky1)
     P_N = model.P_N(z,A_sky1,t_tot,N_dish,theta_FWHM=theta_FWHM1)
     surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+    dbeam,dsys,dphotoz = 0,0,0
+    nuispars = dbeam,dsys,dphotoz
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)

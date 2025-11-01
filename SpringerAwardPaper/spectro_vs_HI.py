@@ -52,19 +52,21 @@ for i in range(len(zbins_LRG)-1):
     V_bin2 = survey.Vsur(zbins_LRG[i],zbins_LRG[i+1],A_sky_LRG)
     nbar = N_LRG[i]/V_bin2
     surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+    dbeam,dsys,dphotoz = 0,0,0
+    nuispars = dbeam,dsys,dphotoz
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
 
-    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
     SNR_SKAO.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
     z_21cm.append(z)
 
     cosmopars[1] = 1 # neutralise Tbar parameter for galaxy tracer
     cosmopars[3] = b_LRG
-    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'2')
-    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'2')
+    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
+    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
     SNR_LRG[i] = P_gal[k>k_nom][0] / P_gal_err[k>k_nom][0]
 
     # MeerKLASS:
@@ -74,8 +76,8 @@ for i in range(len(zbins_LRG)-1):
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
-    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
     SNR_MK.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
     z_MK.append(z)
 
@@ -93,15 +95,15 @@ for i in range(len(zbins_ELG)-1):
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
 
-    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
     SNR_SKAO.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
     z_21cm.append(z)
 
     cosmopars[1] = 1 # neutralise Tbar parameter for galaxy tracer
     cosmopars[3] = b_ELG
-    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'2')
-    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'2')
+    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
+    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
     SNR_ELG[i] = P_gal[k>k_nom][0] / P_gal_err[k>k_nom][0]
 
     # MeerKLASS:
@@ -112,8 +114,8 @@ for i in range(len(zbins_ELG)-1):
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
-    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
     SNR_MK.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
     z_MK.append(z)
 
@@ -131,15 +133,15 @@ for i in range(len(zbins_QSO)-1):
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
     Pmod = cosmo.MatterPk(z)
 
-    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+    P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+    P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
     SNR_SKAO.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
     z_21cm.append(z)
 
     cosmopars[1] = 1 # neutralise Tbar parameter for galaxy tracer
     cosmopars[3] = b_QSO
-    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'2')
-    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'2')
+    P_gal = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
+    P_gal_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'2')
     SNR_QSO[i] = P_gal[k>k_nom][0] / P_gal_err[k>k_nom][0]
 
 # High-z SKAO bin:
@@ -151,8 +153,8 @@ surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_
 cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
 Pmod = cosmo.MatterPk(z)
 
-P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,'1')
-P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,'1')
+P_HI = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
+P_HI_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,'1')
 SNR_SKAO.append( P_HI[k>k_nom][0] / P_HI_err[k>k_nom][0] )
 z_21cm.append(z)
 

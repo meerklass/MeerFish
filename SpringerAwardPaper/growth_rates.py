@@ -44,6 +44,8 @@ for i in range(len(zbins)-1):
     A_sky = None # None is default
     z,zmin1,zmin2,zmax1,zmax2,A_sky1,A_sky2,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,t_tot,N_dish,sigma_z1,sigma_z2,P_N,nbar = survey.params(Survey1=Survey,A_sky1=A_sky,zminzmax=zminzmax,f_tobsloss=epsilon)
     surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+    dbeam,dsys,dphotoz = 0,0,0
+    nuispars = dbeam,dsys,dphotoz
 
     ### Cosmological parameters and kbins:
     cosmopars = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
@@ -51,7 +53,7 @@ for i in range(len(zbins)-1):
     k,kbins,kmin,kmax = model.get_kbins(z,zmin1,zmax1,A_sky1)
 
     theta = model.get_param_vals(theta_ids,z,cosmopars)
-    F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,ells,tracer='1')
+    F = fisher.Matrix_ell(theta_ids,k,Pmod,cosmopars,surveypars,nuispars,ells,tracer='1')
     C = fisher.FisherInverse(F)
     f.append(theta[1])
     f_err.append(np.sqrt(C[1,1]))
