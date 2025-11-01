@@ -15,7 +15,7 @@ We then recommend going through the notebook in
 ``demo/getting_started.ipynb``
 
 
-Please refer to the notes MeerFish_notes.pdf in the main repository for some detailed formalism covering these codes.
+Please refer to the notes in Appendix A of https://arxiv.org/abs/????.????? for some detailed formalism covering these codes.
 
 ## Code developers:
 

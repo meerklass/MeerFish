@@ -14,6 +14,8 @@ import survey
 ### Survey parameters:
 z,zmin1,zmin2,zmax1,zmax2,A_sky1,A_sky2,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,t_tot,N_dish,sigma_z1,sigma_z2,P_N,nbar = survey.params()
 surveypars = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
+dbeam,dsys,dphotoz = 0,0,0
+nuispars = dbeam,dsys,dphotoz
 
 ### Cosmological parameters:
 Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmo.SetCosmology(z=z,return_cosmopars=True) # set initial default cosmology
@@ -30,39 +32,40 @@ tracer = '1'
 
 ### Obtain power spectrum model:
 import model
-P_ell = model.P_ell(ell,k,Pmod,cosmopars,surveypars,tracer)
+P_ell = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True)
 plt.plot(k,P_ell,color='black',ls='--')
-P_ell_obs = model.P_ell_obs(ell,k,Pmod,cosmopars,surveypars,tracer)
+P_ell_obs = model.P_ell_obs(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True)
 plt.plot(k,P_ell_obs,color='tab:blue')
-P_ell_err = model.P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,tracer)
+P_ell_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True)
 plt.fill_between(k,(P_ell_obs-P_ell_err),(P_ell_obs+P_ell_err),alpha=0.6,color='tab:blue')
 plt.loglog()
 plt.figure()
-#exit()
 
 ### Observational effects on quadrupole:
 ell = 2
 tracer  = 'X'
 cosmopars_nogrowth = np.array([Tbar1,Tbar2,b1,b2,bphi1,bphi2,0,a_perp,a_para,A_BAO,f_NL])
 surveypars_nobeam = z,V_bin1,V_bin2,V_binX,0,theta_FWHM2,sigma_z1,sigma_z2,P_N,1/nbar
-Pobs_nogrowth = model.P_ell_obs(ell,k,Pmod,cosmopars_nogrowth,surveypars_nobeam,tracer)
-sig_err = model.P_ell_err(ell,k,z,Pmod,cosmopars_nogrowth,surveypars_nobeam,tracer=tracer)
+Pobs_nogrowth = model.P_ell_obs(ell,k,Pmod,cosmopars_nogrowth,surveypars_nobeam,nuispars,tracer,dampsignal=True)
+sig_err = model.sigma_ell_error(ell,k,Pmod,cosmopars_nogrowth,surveypars_nobeam,nuispars,tracer=tracer,dampsignal=True)
 plt.plot(k,k**2*Pobs_nogrowth,color='black',label='no growth, no beam')
 plt.fill_between(k,k**2*(Pobs_nogrowth-sig_err),k**2*(Pobs_nogrowth+sig_err),alpha=0.6,color='black')
 
-Pobs_nogrowth = model.P_ell_obs(ell,k,Pmod,cosmopars_nogrowth,surveypars,tracer)
-sig_err = model.P_ell_err(ell,k,z,Pmod,cosmopars_nogrowth,surveypars,tracer=tracer)
+Pobs_nogrowth = model.P_ell_obs(ell,k,Pmod,cosmopars_nogrowth,surveypars,nuispars,tracer,dampsignal=True)
+sig_err = model.sigma_ell_error(ell,k,Pmod,cosmopars_nogrowth,surveypars,nuispars,tracer=tracer,dampsignal=True)
 plt.plot(k,k**2*Pobs_nogrowth,color='tab:red',label='no growth, with beam')
 plt.fill_between(k,k**2*(Pobs_nogrowth-sig_err),k**2*(Pobs_nogrowth+sig_err),alpha=0.6,color='tab:red')
 
-Pobs = model.P_ell_obs(ell,k,Pmod,cosmopars,surveypars,tracer)
-sig_err = model.P_ell_err(ell,k,z,Pmod,cosmopars,surveypars,tracer=tracer)
+Pobs = model.P_ell_obs(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True)
+sig_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer=tracer,dampsignal=True)
 plt.plot(k,k**2*Pobs,color='tab:blue',label='with growth, with beam')
 plt.fill_between(k,k**2*(Pobs-sig_err),k**2*(Pobs+sig_err),alpha=0.6,color='tab:blue')
 plt.legend(fontsize=12)
 plt.xlim(k[0],k[-1])
 plt.xlabel(r'$k\,[h\,{\rm Mpc}^{-1}]$')
 plt.ylabel(r'$k^2\,P_2(k)\,[h\,{\rm Mpc}\,{\rm mK}]$')
+plt.show()
+exit()
 
 ### Effect of t_obs on quadrupole:
 plt.figure(figsize=(16,8))
@@ -74,12 +77,12 @@ for i in range(len(t_tots)):
     surveypars_i = z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1_i,1/nbar
     plt.subplot(141+i)
     Pobs_nogrowth = model.P_ell_obs(ell,k,Pmod,cosmopars_nogrowth,surveypars_i,tracer)
-    sig_err = model.P_ell_err(ell,k,z,Pmod,cosmopars_nogrowth,surveypars_i,tracer=tracer)
+    sig_err = model.sigma_ell_error(ell,k,Pmod,cosmopars_nogrowth,surveypars_i,tracer=tracer)
     plt.plot(k,k**2*Pobs_nogrowth,color='tab:red',label='no growth')
     plt.fill_between(k,k**2*(Pobs_nogrowth-sig_err),k**2*(Pobs_nogrowth+sig_err),alpha=0.6,color='tab:red')
 
     Pobs = model.P_ell_obs(ell,k,Pmod,cosmopars,surveypars_i,tracer)
-    sig_err = model.P_ell_err(ell,k,z,Pmod,cosmopars,surveypars_i,tracer=tracer)
+    sig_err = model.sigma_ell_error(ell,k,Pmod,cosmopars,surveypars_i,tracer=tracer)
     plt.plot(k,k**2*Pobs,color='tab:blue',label='with growth')
     plt.fill_between(k,k**2*(Pobs-sig_err),k**2*(Pobs+sig_err),alpha=0.6,color='tab:blue')
 
