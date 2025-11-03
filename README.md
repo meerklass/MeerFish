@@ -15,7 +15,7 @@ We then recommend going through the notebook in
 ``demo/getting_started.ipynb``
 
 
-Please refer to the notes in Appendix A of https://arxiv.org/abs/????.????? for some detailed formalism covering these codes.
+Please refer to the notes in Appendix A of https://arxiv.org/abs/2510.27549 for some detailed formalism covering these codes.
 
 ## Code developers:
 
@@ -24,7 +24,7 @@ Please refer to the notes in Appendix A of https://arxiv.org/abs/????.????? for 
 ## Credit:
 
 If you use these codes in your research, we kindly ask that you cite this repository [https://github.com/meerklass/MeerFish] and the accompanying paper *Revealing cosmological fluctuations in 21cm intensity maps with MeerKLASS: from maps to power spectra* (arXiv reference below):
-> [https://arxiv.org/abs/????.?????]
+> [https://arxiv.org/abs/2510.27549]
 
 ## Contact:
 
