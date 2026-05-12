@@ -142,16 +142,16 @@ def P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' 2D signal model for power spectrum '''
     ### dampsignal=True: will directly apply instrumental effects to signal (caution this can add non-cosmological information)
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # don't amply instrumental damping to signal power
         if tracer=='1': return Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) + dsys
         if tracer=='2': return Tbar2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k)
         if tracer=='X': return Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k)
     if dampsignal==True: # do amply instrumental damping to signal power
-        if tracer=='1': return Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 + dsys
+        if tracer=='1': return Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg) + dsys
         if tracer=='2': return Tbar2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2
-        if tracer=='X': return Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam) * B_zerr(mu,k,sigma_z1,z) * B_beam(mu,k,z,theta_FWHM2) * B_zerr(mu,k,sigma_z2+dphotoz,z)
+        if tracer=='X': return Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam) * B_zerr(mu,k,sigma_z1,z) * B_beam(mu,k,z,theta_FWHM2) * B_zerr(mu,k,sigma_z2+dphotoz,z) * B_fg(mu,k,k_fg)
 
 def P_ell(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' Integrate signal model over mu into multipole ell '''
@@ -161,15 +161,15 @@ def P_ell(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
     k_t,mu_t = APpars(k_m,mu_m,a_perp,a_para)
     alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
-    return alpha_v * (2*ell + 1) * scipy.integrate.simps( P(k_t,mu_t,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mu_m) , mu_1d, axis=0) # integrate over mu axis (axis=0)
+    return alpha_v * (2*ell + 1) * scipy.integrate.simpson( P(k_t,mu_t,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mu_m) , x=mu_1d, axis=0) # integrate over mu axis (axis=0)
 
 def P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not apply instrumental effects to noise since it remains in signal
     ''' 2D observational power spectrum with noise components'''
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # damp noise terms to inflate errors
-        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) / (B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2)
+        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) / (B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg))
         if tracer=='2': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N2 + dsys) / (B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2)
         if tracer=='X': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
     if dampsignal==True: # don't apply damping to noise to inflate errors (signal damped instead)
@@ -182,12 +182,12 @@ def P_ell_obs(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not apply instrumental effects to noise since it remains in signal
     mu = np.linspace(0,1,1000)
     kgrid,mugrid = np.meshgrid(k,mu)
-    return (2*ell + 1) * scipy.integrate.simps( P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mugrid) , mu, axis=0) # integrate over mu axis (axis=0)
+    return (2*ell + 1) * scipy.integrate.simpson( P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mugrid) , x=mu, axis=0) # integrate over mu axis (axis=0)
 
 def sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not contain instrumental effects in noise (thus errors) since it remains in signal
     P_obs_ = P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     if tracer=='1': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin1))
     if tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin2))
     if tracer=='X':
@@ -200,11 +200,11 @@ def sigma_ell_error(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsigna
     ### dampsignal=True: will not contain instrumental effects in noise (thus errors) since it remains in signal
     mu_1d = np.linspace(0,1,1000)
     k,mu = np.meshgrid(k_1d,mu_1d)
-    return np.sqrt( (2*ell + 1)**2 * scipy.integrate.simps( sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)**2 * Leg(ell)(mu)**2 , mu_1d, axis=0) ) # integrate over mu axis (axis=0)
+    return np.sqrt( (2*ell + 1)**2 * scipy.integrate.simpson( sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)**2 * Leg(ell)(mu)**2 , x=mu_1d, axis=0) ) # integrate over mu axis (axis=0)
 
 def Nmodes(k,mu,V_bin):
     # leave out dmu term from standard definition otherwise its double counted
-    #    in scipy.integrate.simps integral over mu when obtaining P_ell error
+    #    in scipy.integrate.simpson integral over mu when obtaining P_ell error
     dk = np.mean(np.diff(k[0,:]))
     return k**2*dk*V_bin / (8*np.pi**2)
 
@@ -234,6 +234,12 @@ def B_chan(mu,k,z,delta_nu=0):
     k_para[k_para==0] = 1e-30
     return np.sin(k_para*s_para/2) / (k_para*s_para/2)
 
+def B_fg(mu,k,k_fg=0):
+    if k_fg==0: return 1
+    k_para = k*mu
+    k_para[k_para==0] = 1e-30
+    return 1 - np.exp( -k_para/k_fg )
+
 def APpars(k_m,mu_m,a_perp,a_para):
     F_AP = a_para/a_perp
     k_t = k_m/a_perp * np.sqrt( 1 + mu_m**2*(F_AP**(-2)-1) )
@@ -256,7 +262,7 @@ def P_1D(k_m,mu_m,Pmod,cosmopars,surveypars,nuispars,tracer):
         mask = (k_para >= kpara_bins[i]) & (k_para < kpara_bins[i+1])
         if np.any(mask):
             integrand = P3D[mask] * np.abs(k_perp[mask])
-            P1D[i] = scipy.integrate.simps(integrand, k_perp[mask], axis=0) # integrate over mu axis (axis=0)
+            P1D[i] = scipy.integrate.simpson(integrand, x=k_perp[mask], axis=0) # integrate over mu axis (axis=0)
     return kpara_centers, P1D
 
 

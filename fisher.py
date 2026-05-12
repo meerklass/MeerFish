@@ -37,7 +37,11 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     if theta_id==r'$f$': kick,kick_ind[6] = f*epsilon,1
     if theta_id==r'$\alpha_\perp$': kick,kick_ind[7] = a_perp*epsilon,1
     if theta_id==r'$\alpha_\parallel$': kick,kick_ind[8] = a_para*epsilon,1
-    if theta_id==r'$A_{\rm BAO}$': return dPell_dtheta(ells,k,dlnP_dA,tau)
+
+
+    if theta_id==r'$A_{\rm BAO}$': kick,kick_ind[9] = A_BAO*epsilon,1 ##### NOT FULLY SET UP - NEED TO INCLUDE f_BAO in model power
+
+
     if theta_id==r'$f_{\rm NL}$': kick,kick_ind[10] = epsilon,1 # set kick=epsilon for f_NL to avoid divide by zero and zero kick
     ## nuisance parameters:
     kick_ind_nuis = np.zeros(len(nuispars)) # binary mask to select input parameter to kick
@@ -53,11 +57,20 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     npm = nuispars - kick_ind_nuis*kick
     np2p = nuispars + kick_ind_nuis*2*kick
     np2m = nuispars - kick_ind_nuis*2*kick
-    return (-1*model.P_ell(ell,k,Pmod,cp2p,surveypars,np2p,tracer,dampsignal) + 8*model.P_ell(ell,k,Pmod,cpp,surveypars,npp,tracer,dampsignal) \
-     - 8*model.P_ell(ell,k,Pmod,cpm,surveypars,npm,tracer,dampsignal) + model.P_ell(ell,k,Pmod,cp2m,surveypars,np2m,tracer,dampsignal)) / (12*kick)
+    '''
+    if theta_id==r'$A_{\rm BAO}$':
+        Pk_smooth,f_BAO = model.Pk_noBAO(model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal),k)
 
-def dlnP_dA(k,mu,tracer):
-    return f_BAO/(1+A_BAO*f_BAO)
+        return (-1*(1 + (A_BAO+2*kick)*f_BAO )*Pk_smooth + 8*(1 + (A_BAO+1*kick)*f_BAO )*Pk_smooth \
+        -  8*(1 + (A_BAO-1*kick)*f_BAO )*Pk_smooth + (1 + (A_BAO-2*kick)*f_BAO )*Pk_smooth) / (12*kick)
+    '''
+    if theta_id==r'$A_{\rm BAO}$':
+        Pk_smooth, f_BAO = model.Pk_noBAO(model.P_ell(ell, k, Pmod, cosmopars, surveypars, nuispars, tracer, dampsignal),k)
+        return Pk_smooth * f_BAO
+
+    else:
+        return (-1*model.P_ell(ell,k,Pmod,cp2p,surveypars,np2p,tracer,dampsignal) + 8*model.P_ell(ell,k,Pmod,cpp,surveypars,npp,tracer,dampsignal) \
+         - 8*model.P_ell(ell,k,Pmod,cpm,surveypars,npm,tracer,dampsignal) + model.P_ell(ell,k,Pmod,cp2m,surveypars,np2m,tracer,dampsignal)) / (12*kick)
 
 def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,dampsignal_=True):
     '''Compute Fisher matrix for multipoles with parameter set [theta]'''
@@ -67,7 +80,7 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
     global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
 
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX
@@ -78,14 +91,6 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
     if tracer=='MT': tau = ['1','2','X']
 
     ntau,nell,nk = len(tau),len(ells),len(k)
-
-    if r'$A_{\rm BAO}$' in theta_ids: # Only need to do if constraining A_BAO
-        global f_BAO_ell
-        f_BAO_ell = np.zeros((ntau,nell,len(k)))
-        for t in range(ntau):
-            for i,ell_i in enumerate(ells):
-                f_BAO_ell[t,i] = model.Pk_noBAO(model.P_ell(ell_i,k,Pmod,cosmopars,surveypars,nuispars,tau[t],dampsignal),k)[1]
-
     dk = np.diff(k)
     if np.var(dk)/np.mean(dk)>1e-6: # use to detect non-linear k-bins
          print('\nError! - k-bins must be linearly spaced.'); exit()
@@ -136,7 +141,7 @@ def Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau):
                             else: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'X',dampsignal)**2
                     # Calculating k's along diagonal of each multipole permutation in C
                     #  - first compute 1D diagonal array "C_diag" to place into broader C matrix:
-                    C_diag = scipy.integrate.simps(integrand, mu, axis=0) # integrate over mu axis (axis=0)
+                    C_diag = scipy.integrate.simpson(integrand, x=mu, axis=0) # integrate over mu axis (axis=0)
                     C_sub[i*nk:i*nk+nk,j*nk:j*nk+nk] = np.identity(nk) * C_diag # bed 1D array along diagonal of multipole permutation in C
             C[ t0*nell*nk:(t0+1)*nell*nk, t1*nell*nk:(t1+1)*nell*nk ] = C_sub
     return C
@@ -151,7 +156,7 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI',dampsignal_=T
 
     #global V_bin
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT':V_bin = np.min([V_bin1,V_bin2])
@@ -372,7 +377,7 @@ def _deriv_vector(theta_id, ells, k, mu, tracer):
     for ell in ells:
         # this matches how you build Fisher: integrate over mu then keep k-dependence
         integrand = dP_dtheta_stencil(k, mu, ell, theta_id, tracer)  # shape (len(mu), len(k))
-        dPell = scipy.integrate.simps(integrand, mu, axis=0)         # -> (len(k),)
+        dPell = scipy.integrate.simpson(integrand, x=mu, axis=0)         # -> (len(k),)
         out.append(np.ravel(dPell))
     return np.concatenate(out)  # shape (n_ell * n_k,)
 
@@ -392,7 +397,7 @@ def check_stencil_convergence(theta_id, ells, k, tracer, Pmod_, cosmopars_, surv
     Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
     global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
     Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2 = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX

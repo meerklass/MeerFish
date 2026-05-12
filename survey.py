@@ -78,7 +78,7 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
         P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM)
     if Survey1=='DESI-LRG' or Survey2=='DESI-LRG': # DESI Luminous Red Galaxies
         if zminzmax==None: zmins.append(0.4);zmaxs.append(1.1)
-        if A_sky2==None: A_sky2 = 5000 # area in sq.deg
+        if A_sky2==None: A_sky2 = 15000 # area in sq.deg
         A_skys.append(A_sky2) # area in sq.deg
         ####### AMEND TO N(z) profile ##########
         nbar = 1e-4 # number density of galaxies
