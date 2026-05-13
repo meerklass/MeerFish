@@ -88,11 +88,16 @@ def Tbar(z,Omega_HI):
     h = H0/100
     return 180 * Omega_HI * h * (1+z)**2 / (Hz/H0)
 
-def get_kbins(z,zmin,zmax,A_sky,kmax=0.3):
-    k_perp_min = np.pi / cosmo.D_ang(A_sky,z)
-    k_para_min = np.pi / (cosmo.D_com(zmax)-cosmo.D_com(zmin))
-    kmin = np.min([k_perp_min,k_para_min])
-    kbins = np.arange(kmin,kmax,kmin)
+def get_kbins(z,zmin,zmax,A_sky,kmax=0.3,Taruya=False):
+    if Taruya==False:
+        k_perp_min = np.pi / cosmo.D_ang(A_sky,z)
+        k_para_min = np.pi / (cosmo.D_com(zmax)-cosmo.D_com(zmin))
+        kmin = np.min([k_perp_min,k_para_min])
+        kbins = np.arange(kmin,kmax,kmin)
+    if Taruya==True:
+        #kbins defined by kmin from Taruya+10 (https://arxiv.org/pdf/1006.0699) below eq29
+        kmin = 2*np.pi / survey.Vsur(zmin,zmax,A_sky)**(1/3)
+        kbins = np.arange(kmin,kmax,kmin)
     k = (kbins[1:] + kbins[:-1])/2 #centre of k bins
     return k,kbins,kmin,kmax
 
@@ -266,7 +271,10 @@ def P_1D(k_m,mu_m,Pmod,cosmopars,surveypars,nuispars,tracer):
     return kpara_centers, P1D
 
 
-def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]):
+def Pk_noBAO(Pk,k,#kBAO=[0.03,0.3]
+        ):
+    kBAO=[k[1],k[-2]] # Use this as default instead
+
     """ Code from Ze - following Phil Bull method (https://arxiv.org/pdf/1405.1452.pdf)
     Construct a smooth power spectrum with BAOs removed, and a corresponding
     BAO template function, by using a two-stage splining process."""
