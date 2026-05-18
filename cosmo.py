@@ -6,7 +6,7 @@ from scipy.interpolate import interp1d
 import model as meerfish_model
 c_km = 299792.458 #km/s
 
-def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False):
+def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=False):
     import camb
     from camb import model, initialpower
     global H_0
@@ -40,9 +40,9 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False):
     delta_c = 1.686
     MatterPk(z,1e-4,1e0,NonLinear=False) # Use to set global transfer function T
     if return_cosmopars==True:
-        Tbar1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z))
+        Tbar1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z),ZesVersion=ZesVersion)
         Tbar2 = 1
-        b1 = meerfish_model.b_HI(z)
+        b1 = meerfish_model.b_HI(z,ZesVersion=ZesVersion)
         b2 = 1 + 0.84*z # Assumes LSST/Rubin bias [from https://arxiv.org/pdf/0912.0201]
         #bphi1 = b_phi_universality(b1)
         bphi1 = b_phi_HI(z)

@@ -37,11 +37,7 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     if theta_id==r'$f$': kick,kick_ind[6] = f*epsilon,1
     if theta_id==r'$\alpha_\perp$': kick,kick_ind[7] = a_perp*epsilon,1
     if theta_id==r'$\alpha_\parallel$': kick,kick_ind[8] = a_para*epsilon,1
-
-
-    if theta_id==r'$A_{\rm BAO}$': kick,kick_ind[9] = A_BAO*epsilon,1 ##### NOT FULLY SET UP - NEED TO INCLUDE f_BAO in model power
-
-
+    if theta_id==r'$A_{\rm BAO}$': kick,kick_ind[9] = A_BAO*epsilon,1
     if theta_id==r'$f_{\rm NL}$': kick,kick_ind[10] = epsilon,1 # set kick=epsilon for f_NL to avoid divide by zero and zero kick
     ## nuisance parameters:
     kick_ind_nuis = np.zeros(len(nuispars)) # binary mask to select input parameter to kick
@@ -57,17 +53,10 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     npm = nuispars - kick_ind_nuis*kick
     np2p = nuispars + kick_ind_nuis*2*kick
     np2m = nuispars - kick_ind_nuis*2*kick
-    '''
-    if theta_id==r'$A_{\rm BAO}$':
+    if theta_id==r'$A_{\rm BAO}$': # individual case for BAO wiggles detection (involved smoothed power):
         Pk_smooth,f_BAO = model.Pk_noBAO(model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal),k)
-
         return (-1*(1 + (A_BAO+2*kick)*f_BAO )*Pk_smooth + 8*(1 + (A_BAO+1*kick)*f_BAO )*Pk_smooth \
         -  8*(1 + (A_BAO-1*kick)*f_BAO )*Pk_smooth + (1 + (A_BAO-2*kick)*f_BAO )*Pk_smooth) / (12*kick)
-    '''
-    if theta_id==r'$A_{\rm BAO}$':
-        Pk_smooth, f_BAO = model.Pk_noBAO(model.P_ell(ell, k, Pmod, cosmopars, surveypars, nuispars, tracer, dampsignal),k)
-        return Pk_smooth * f_BAO
-
     else:
         return (-1*model.P_ell(ell,k,Pmod,cp2p,surveypars,np2p,tracer,dampsignal) + 8*model.P_ell(ell,k,Pmod,cpp,surveypars,npp,tracer,dampsignal) \
          - 8*model.P_ell(ell,k,Pmod,cpm,surveypars,npm,tracer,dampsignal) + model.P_ell(ell,k,Pmod,cp2m,surveypars,np2m,tracer,dampsignal)) / (12*kick)

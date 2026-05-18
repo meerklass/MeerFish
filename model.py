@@ -4,6 +4,7 @@ import scipy
 import matplotlib.pyplot as plt
 from scipy import integrate
 from scipy.special import legendre as Leg
+from scipy.interpolate import splrep, splev
 v_21cm = 1420.405751#MHz
 c_km = 299792.458 #km/s
 import survey
@@ -37,26 +38,7 @@ def get_param_vals(ids,z,cosmopars):
         if ids[i]==r'$\delta_{\rm z}$': vals.append( 0 )
     return np.array(vals)
 
-'''
-def get_param_selection(ids):
-    theta_select=[]
-    Npar = len(ids)
-    for i in range(Npar):
-        if ids[i]==r'$\overline{T}_{\rm HI}$': theta_select.append(0)
-        if ids[i]==r'$\overline{T}_2$': theta_select.append(1)
-        if ids[i]==r'$b_1$': theta_select.append( 2 )
-        if ids[i]==r'$b_2$': theta_select.append( 3 )
-        if ids[i]==r'$b^\phi_1$': theta_select.append( 4 )
-        if ids[i]==r'$b^\phi_2$': theta_select.append( 5 )
-        if ids[i]==r'$f$': theta_select.append( 6 )
-        if ids[i]==r'$\alpha_\perp$': theta_select.append( 7 )
-        if ids[i]==r'$\alpha_\parallel$': theta_select.append( 8 )
-        if ids[i]==r'$A_{\rm BAO}$': theta_select.append( 9 )
-        if ids[i]==r'$f_{\rm NL}$': theta_select.append( 10 )
-    return np.array(theta_select)
-'''
-
-def b_HI(z):
+def b_HI(z,ZesVersion=False):
     ''' HI linear bias '''
     '''Use 6 values for HI bias at redshifts 0 to 5 found in Table 5 of
     Villaescusa-Navarro et al.(2018) https://arxiv.org/pdf/1804.09180.pdf
@@ -68,7 +50,8 @@ def b_HI(z):
     #A,B,C = coef[2],coef[1],coef[0]
     ###################################################
     A,B,C = 0.84178571,0.69289286,-0.04589286
-    return A + B*z + C*z**2
+    if ZesVersion==False: return A + B*z + C*z**2
+    if ZesVersion==True: return 0.67 + 0.18*z + 0.05*z**2
 
 def OmegaHI(z,SKAORedBook=False):
     ''' HI density parameter '''
@@ -81,12 +64,25 @@ def OmegaHI(z,SKAORedBook=False):
         #   whole spectrum so that it is more in line with recent measurements in WiggleZ-cross
         return 0.00067432 + 0.00039*z - 0.000065*z**2
 
-def Tbar(z,Omega_HI):
+def Tbar(z,Omega_HI,ZesVersion=False):
     ''' Mean HI temperature [Units of mK] '''
-    Hz = cosmo.H(z) #km / Mpc s
-    H0 = cosmo.H(0) #km / Mpc s
-    h = H0/100
-    return 180 * Omega_HI * h * (1+z)**2 / (Hz/H0)
+    if ZesVersion==False:
+        Hz = cosmo.H(z) #km / Mpc s
+        H0 = cosmo.H(0) #km / Mpc s
+        h = H0/100
+        return 180 * Omega_HI * h * (1+z)**2 / (Hz/H0)
+    if ZesVersion==True:
+        return 0.0559 + 0.2324*z - 0.024*z**2
+
+def Tsys(z):
+    """Ze's function: returns interpolated system temperature in mK"""
+    #in MHz, K
+    HI = 1420 #MHz
+    nu,Tsys_eta,a_eff = np.loadtxt('/Users/sadmin/Documents/MeerFish/Tsys/UHF_Tsys.txt',unpack=True) # set to location of MeerFish
+    ratio = 0.72
+    T_sys_meerkat_rep = splrep(nu,Tsys_eta)
+    T_sys_meerkat = splev( HI / (1+z), T_sys_meerkat_rep )
+    return T_sys_meerkat*ratio * 1e3
 
 def get_kbins(z,zmin,zmax,A_sky,kmax=0.3,Taruya=False):
     if Taruya==False:
@@ -243,7 +239,7 @@ def B_fg(mu,k,k_fg=0):
     if k_fg==0: return 1
     k_para = k*mu
     k_para[k_para==0] = 1e-30
-    return 1 - np.exp( -k_para/k_fg )
+    return 1 - np.exp( -(k_para/k_fg)**2 )
 
 def APpars(k_m,mu_m,a_perp,a_para):
     F_AP = a_para/a_perp

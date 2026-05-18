@@ -7,7 +7,7 @@ import model
 c_km = 299792.458 #km/s
 c = c_km*1e3
 
-def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zminzmax=None,f_tobsloss=0,t_tot=0):
+def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zminzmax=None,f_tobsloss=0,t_tot=0,N_dish=None,T_sys=None):
 
     # A_skyX: manual input for overlapping sky area between two surveys. If None
     #   given, A_sky will default to the full area for the smallest survey,
@@ -18,7 +18,7 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
     if Survey2==None: Survey2 = Survey1
     zmins,zmaxs = [],[] # Arrays to collect z limits for both surveys
     A_skys = []
-    P_N,D_dish,N_dish,nbar,sigma_z1,sigma_z2 = None,None,None,1e30,None,None # Radio/Opt specific params. Set None/inf as default
+    P_N,D_dish,nbar,sigma_z1,sigma_z2 = None,None,1e30,None,None # Radio/Opt specific params. Set None/inf as default
 
     ### Telescope/survey parameters:
     if Survey1=='MK_2019' or Survey2=='MK_2019': # MeerKAT 2019 pilot survey in L-band
@@ -36,10 +36,10 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
         if A_sky1==None: A_sky1 = 200 # area in sq.deg
         A_skys.append(A_sky1)
         if t_tot==0: t_tot = 5 * (1 - f_tobsloss) # observation hours
-        N_dish = 60 # number of dishes
+        if N_dish==None: N_dish = 60 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         theta_FWHM,R_beam = BeamPars(D_dish,z)
-        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM)
+        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM,T_sys=T_sys)
     elif Survey1=='MK_LB' or Survey2=='MK_LB': # MeerKLASS L-band
         if zminzmax==None: zmins.append(0.2);zmaxs.append(0.58)
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
@@ -48,10 +48,10 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
         if A_sky1==None: A_sky1 = 4000 # area in sq.deg
         A_skys.append(A_sky1) # area in sq.deg
         if t_tot==0: t_tot = 4000 * (1 - f_tobsloss) # observation hours
-        N_dish = 64 # number of dishes
+        if N_dish==None: N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         theta_FWHM,R_beam = BeamPars(D_dish,z)
-        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM)
+        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM,T_sys=T_sys)
     elif Survey1=='MK_UHF' or Survey2=='MK_UHF': # MeerKLASS UHF-band
         if zminzmax==None: zmins.append(0.4);zmaxs.append(1.45)
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
@@ -60,10 +60,10 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
         if A_sky1==None: A_sky1 = 10000 # area in sq.deg
         A_skys.append(A_sky1) # area in sq.deg
         if t_tot==0: t_tot = 2500 * (1 - f_tobsloss)
-        N_dish = 64 # number of dishes
+        if N_dish==None: N_dish = 64 # number of dishes
         D_dish = 13.5 # diameter of dish [metres]
         theta_FWHM,R_beam = BeamPars(D_dish,z)
-        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM)
+        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM,T_sys=T_sys)
     elif Survey1=='SKA' or Survey2=='SKA': # SKA Band 1
         if zminzmax==None: zmins.append(0.35);zmaxs.append(3)
         else: zmins.append(zminzmax[0]); zmaxs.append(zminzmax[1])
@@ -72,10 +72,10 @@ def params(Survey1='MK_UHF',Survey2=None,A_sky1=None,A_sky2=None,A_skyX=None,zmi
         if A_sky1==None: A_sky1 = 20000 # area in sq.deg
         A_skys.append(A_sky1) # area in sq.deg
         if t_tot==0: t_tot = 10000 * (1 - f_tobsloss) # observation hours
-        N_dish = 197 # number of dishes
+        if N_dish==None: N_dish = 197 # number of dishes
         D_dish = 15 # diameter of dish [metres]
         theta_FWHM,R_beam = BeamPars(D_dish,z)
-        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM)
+        P_N = model.P_N(z,A_skys[-1],t_tot,N_dish,theta_FWHM=theta_FWHM,T_sys=T_sys)
     if Survey1=='DESI-LRG' or Survey2=='DESI-LRG': # DESI Luminous Red Galaxies
         if zminzmax==None: zmins.append(0.4);zmaxs.append(1.1)
         if A_sky2==None: A_sky2 = 15000 # area in sq.deg
