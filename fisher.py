@@ -29,7 +29,8 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     see eq201 in Euclid paper: https://www.aanda.org/articles/aa/pdf/2020/10/aa38071-20.pdf'''
     # Define kicks to input parameter then calculate 5 point stencil numerical derivative
     kick_ind = np.zeros(len(cosmopars)) # binary mask to select input parameter to kick
-    if theta_id==r'$\overline{T}_{\rm HI}$': kick,kick_ind[0] = Tbar1*epsilon,1
+    if theta_id==r'$\mathcal{A}_1$': kick,kick_ind[0] = amp1*epsilon,1
+    if theta_id==r'$\mathcal{A}_2$': kick,kick_ind[1] = amp2*epsilon,1
     if theta_id==r'$b_1$': kick,kick_ind[2] = b1*epsilon,1
     if theta_id==r'$b_2$': kick,kick_ind[3] = b2*epsilon,1
     if theta_id==r'$b^\phi_1$': kick,kick_ind[4] = bphi1*epsilon,1
@@ -39,6 +40,8 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     if theta_id==r'$\alpha_\parallel$': kick,kick_ind[8] = a_para*epsilon,1
     if theta_id==r'$A_{\rm BAO}$': kick,kick_ind[9] = A_BAO*epsilon,1
     if theta_id==r'$f_{\rm NL}$': kick,kick_ind[10] = epsilon,1 # set kick=epsilon for f_NL to avoid divide by zero and zero kick
+    if theta_id==r'$\beta_1$': kick,kick_ind[11] = beta1*epsilon,1
+    if theta_id==r'$\beta_2$': kick,kick_ind[12] = beta2*epsilon,1
     ## nuisance parameters:
     kick_ind_nuis = np.zeros(len(nuispars)) # binary mask to select input parameter to kick
     if theta_id==r'$\delta_{\rm b}$': kick,kick_ind[0] = epsilon*1e-2,1 # set kick=epsilon to avoid divide by zero and zero kick
@@ -66,10 +69,10 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
 
     global z,Pmod,cosmopars,surveypars,nuispars,dampsignal
     Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_; nuispars=nuispars_; dampsignal=dampsignal_
-    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
+    global amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2
 
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX
@@ -141,11 +144,11 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI',dampsignal_=T
 
     global z,Pmod,cosmopars,surveypars,nuispars,dampsignal
     Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_; nuispars=nuispars_; dampsignal=dampsignal_
-    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
+    global amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
 
     #global V_bin
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
+    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT':V_bin = np.min([V_bin1,V_bin2])
@@ -384,9 +387,9 @@ def check_stencil_convergence(theta_id, ells, k, tracer, Pmod_, cosmopars_, surv
     """
     global z,Pmod,cosmopars,surveypars
     Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
-    global Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    global amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX

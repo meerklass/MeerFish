@@ -6,7 +6,7 @@ from scipy.interpolate import interp1d
 import model as meerfish_model
 c_km = 299792.458 #km/s
 
-def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=False):
+def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=False,beta_par=False):
     import camb
     from camb import model, initialpower
     global H_0
@@ -40,19 +40,28 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=F
     delta_c = 1.686
     MatterPk(z,1e-4,1e0,NonLinear=False) # Use to set global transfer function T
     if return_cosmopars==True:
-        Tbar1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z),ZesVersion=ZesVersion)
-        Tbar2 = 1
         b1 = meerfish_model.b_HI(z,ZesVersion=ZesVersion)
         b2 = 1 + 0.84*z # Assumes LSST/Rubin bias [from https://arxiv.org/pdf/0912.0201]
+        if beta_par==True: # power in beta=f/b format
+            amp1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z),ZesVersion=ZesVersion) * b1 # T_HI*b_HI
+            amp2 = b2
+            beta1 = f(z)/b1
+            beta2 = f(z)/b2
+            f_ = -1
+            b1,b2 = 1,1
+        else:
+            amp1 = meerfish_model.Tbar(z,meerfish_model.OmegaHI(z),ZesVersion=ZesVersion)
+            amp2 = 1
+            f_ = f(z)
+            beta1,beta2 = -1,-1
         #bphi1 = b_phi_universality(b1)
         bphi1 = b_phi_HI(z)
         bphi2 = b_phi_universality(b2)
-        f_ = f(z)
         a_perp = 1
         a_para = 1
         A_BAO = 1
         f_NL = 0
-        cosmopars = np.array([Tbar1,Tbar2,b1,b2,bphi1,bphi2,f_,a_perp,a_para,A_BAO,f_NL])
+        cosmopars = np.array([amp1,amp2,b1,b2,bphi1,bphi2,f_,a_perp,a_para,A_BAO,f_NL,beta1,beta2])
         return cosmopars
 
 def f(z):
@@ -92,7 +101,7 @@ def Omega_b(z=0):
 
 def D_com(z,cosmopars=None):
     if cosmopars is not None:
-        Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
+        amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL,beta1,beta2 = cosmopars
 
         a_para = 1
 

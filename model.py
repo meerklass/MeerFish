@@ -19,11 +19,12 @@ def Freq2Red(v):
 
 def get_param_vals(ids,z,cosmopars):
     ''' return model values for parameter strings '''
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL = cosmopars
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
     vals=[]
     Npar = len(ids)
     for i in range(Npar):
-        if ids[i]==r'$\overline{T}_{\rm HI}$': vals.append( Tbar1 )
+        if ids[i]==r'$\mathcal{A}_1$': vals.append( amp1 )
+        if ids[i]==r'$\mathcal{A}_2$': vals.append( amp2 )
         if ids[i]==r'$b_1$': vals.append( b1 )
         if ids[i]==r'$b_2$': vals.append( b2 )
         if ids[i]==r'$b^\phi_1$': vals.append( bphi1 )
@@ -33,6 +34,8 @@ def get_param_vals(ids,z,cosmopars):
         if ids[i]==r'$\alpha_\parallel$': vals.append( a_para )
         if ids[i]==r'$A_{\rm BAO}$': vals.append( A_BAO )
         if ids[i]==r'$f_{\rm NL}$': vals.append( f_NL )
+        if ids[i]==r'$\beta_1$': vals.append( beta1 )
+        if ids[i]==r'$\beta_2$': vals.append( beta2 )
         if ids[i]==r'$\delta_{\rm b}$': vals.append( 0 )
         if ids[i]==r'$\delta_{\rm sys}$': vals.append( 0 )
         if ids[i]==r'$\delta_{\rm z}$': vals.append( 0 )
@@ -142,24 +145,42 @@ def P_N(z,A_sky,t_tot,N_dish,T_sys=None,A_pix=None,theta_FWHM=None,deltanu=0.2,e
 def P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' 2D signal model for power spectrum '''
     ### dampsignal=True: will directly apply instrumental effects to signal (caution this can add non-cosmological information)
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL,beta1,beta2 = cosmopars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     dbeam,dsys,dphotoz = nuispars
-    if dampsignal==False: # don't amply instrumental damping to signal power
-        if tracer=='1': return Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) + dsys
-        if tracer=='2': return Tbar2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k)
-        if tracer=='X': return Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k)
-    if dampsignal==True: # do amply instrumental damping to signal power
-        if tracer=='1': return Tbar1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg) + dsys
-        if tracer=='2': return Tbar2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) * B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2
-        if tracer=='X': return Tbar1*Tbar2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) * B_beam(mu,k,z,theta_FWHM1+dbeam) * B_zerr(mu,k,sigma_z1,z) * B_beam(mu,k,z,theta_FWHM2) * B_zerr(mu,k,sigma_z2+dphotoz,z) * B_fg(mu,k,k_fg)
+    if dampsignal==False: # don't apply instrumental damping to signal power
+        if beta1!=1 or beta2!=-1: # reparameterise with beta=f/b parameters
+            # can't do f_NL in this case so these params ignored
+            if tracer=='1': return amp1**2 * (1 + beta1*mu**2)**2 * Pmod(k) + dsys
+            if tracer=='2': return amp2**2 * (1 + beta2*mu**2)**2 * Pmod(k)
+            if tracer=='X': return amp1*amp2 * (1 + beta1*mu**2)*(1 + beta2*mu**2) * Pmod(k)
+        else: # standard model with b and f separated
+            if tracer=='1': return amp1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) + dsys
+            if tracer=='2': return amp2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k)
+            if tracer=='X': return amp1*amp2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k)
+    if dampsignal==True: # do apply instrumental damping to signal power
+        if beta1!=-1 or beta2!=-1: # reparameterise with beta=f/b parameters
+            # can't do f_NL in this case so these params ignored
+            if tracer=='1': return amp1**2 * (1 + beta1*mu**2)**2 * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg) * B_grid(mu,k,z,cosmopars,dpix,dnu)**2 + dsys
+            if tracer=='2': return amp2**2 * (1 + beta2*mu**2)**2 * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2 * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)**2
+            if tracer=='X': return amp1*amp2 * (1 + beta1*mu**2)*(1 + beta2*mu**2) * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM1+dbeam) * B_zerr(mu,k,sigma_z1,z) * B_beam(mu,k,z,theta_FWHM2) * B_zerr(mu,k,sigma_z2+dphotoz,z) * B_fg(mu,k,k_fg) * B_grid(mu,k,z,cosmopars,dpix,dnu) * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)
+        else: # standard model with b and f separated
+            if tracer=='1': return amp1**2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg) * B_grid(mu,k,z,cosmopars,dpix,dnu)**2 + dsys
+            if tracer=='2': return amp2**2 * (b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1))**2 * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2 * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)**2
+            if tracer=='X': return amp1*amp2 * (b1 + f*mu**2 + bphi1*f_NL*cosmo.M(k,z)**(-1))*(b2 + f*mu**2 + bphi2*f_NL*cosmo.M(k,z)**(-1)) * Pmod(k) \
+                * B_beam(mu,k,z,theta_FWHM1+dbeam) * B_zerr(mu,k,sigma_z1,z) * B_beam(mu,k,z,theta_FWHM2) * B_zerr(mu,k,sigma_z2+dphotoz,z) * B_fg(mu,k,k_fg) * B_grid(mu,k,z,cosmopars,dpix,dnu) * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)
 
 def P_ell(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' Integrate signal model over mu into multipole ell '''
     ### dampsignal=True: will directly apply instrumental effects to signal (caution this can add non-cosmological information)
     mu_1d = np.linspace(0,1,1000)
     k_m,mu_m = np.meshgrid(k_1d,mu_1d)
-    Tbar1,Tbar2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL = cosmopars
+    amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL,beta1,beta2 = cosmopars
     k_t,mu_t = APpars(k_m,mu_m,a_perp,a_para)
     alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
     return alpha_v * (2*ell + 1) * scipy.integrate.simpson( P(k_t,mu_t,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mu_m) , x=mu_1d, axis=0) # integrate over mu axis (axis=0)
@@ -167,14 +188,16 @@ def P_ell(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
 def P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not apply instrumental effects to noise since it remains in signal
     ''' 2D observational power spectrum with noise components'''
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # damp noise terms to inflate errors
-        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) / (B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg))
-        if tracer=='2': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N2 + dsys) / (B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2)
+        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) \
+            / (B_beam(mu,k,z,theta_FWHM1+dbeam)**2 * B_zerr(mu,k,sigma_z1,z)**2 * B_fg(mu,k,k_fg)) * B_grid(mu,k,z,cosmopars,dpix,dnu)**2
+        if tracer=='2': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N2 + dsys) \
+            / (B_beam(mu,k,z,theta_FWHM2)**2 * B_zerr(mu,k,sigma_z2+dphotoz,z)**2) * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)**2
         if tracer=='X': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
     if dampsignal==True: # don't apply damping to noise to inflate errors (signal damped instead)
-        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys)
+        if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) * B_grid(mu,k,z,cosmopars,dpix,dnu,novox=True)**2
         if tracer=='2': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N2 + dsys)
         if tracer=='X': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
 
@@ -188,7 +211,7 @@ def P_ell_obs(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
 def sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not contain instrumental effects in noise (thus errors) since it remains in signal
     P_obs_ = P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
     if tracer=='1': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin1))
     if tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin2))
     if tracer=='X':
@@ -234,6 +257,42 @@ def B_chan(mu,k,z,delta_nu=0):
     k_para = k*mu
     k_para[k_para==0] = 1e-30
     return np.sin(k_para*s_para/2) / (k_para*s_para/2)
+
+def B_grid(mu,k,z,cosmopars,dpix=None,dnu=None,novox=False):
+    '''Top-hat damping due to sampling into (RA,Dec,nu) sky voxels, then regridding into
+    larger Cartesian cells for Pk estimation. Assume Cartesian cells twice the size as sky voxels'''
+    # dpix = angle size [degrees] along one side (commonly 0.3 or 0.5 degrees for MeerKLASS maps)
+    # dnu = frequency resolution [MHz]: 0.210MHz (~0.133MHz) for MeerKAT L-band (UHF-band)
+    # novox: set True if computing damping for galaxies or noise, in which case no voxelisation term is included (just gridding)
+    # ----------------
+    # Pixelisation:
+    if dpix is None: B_pix = 1
+    else:
+        d_c = cosmo.D_com(z,cosmopars)
+        s_pix = d_c * np.radians(dpix)
+        k_perp = k*np.sqrt(1-mu**2)
+        q = k_perp*s_pix/2
+        B_pix = np.divide(np.sin(q),q,out=np.ones_like(q),where=q!=0.)
+    # Channelisation:
+    if dnu is None: B_chan = 1
+    else:
+        s_chan = c_km/cosmo.H(z) * (1+z)**2 * dnu/v_21cm
+        k_para = k*mu
+        q = k_para*s_chan/2
+        B_chan = np.divide(np.sin(q),q,out=np.ones_like(q),where=q!=0.)
+    # Gridding (apply additional step of discretiasation due to gridding):
+    if dpix is None: B_xy = 1
+    else:
+        s_xy = s_pix*2 # cells twice the size of pixels for good sampling
+        q = k_perp*s_xy/2
+        B_xy = np.divide(np.sin(q),q,out=np.ones_like(q),where=q!=0.)
+    if dnu is None: B_z = 1
+    else:
+        s_z = s_chan*2 # cells twice the size of channels for good sampling
+        q = k_para*s_z/2
+        B_z = np.divide(np.sin(q),q,out=np.ones_like(q),where=q!=0.)
+    if novox==True: return B_xy * B_z # no pixelisation for galaxies (sampled straight to grid)
+    else: return B_pix * B_chan * B_xy * B_z
 
 def B_fg(mu,k,k_fg=0):
     if k_fg==0: return 1
