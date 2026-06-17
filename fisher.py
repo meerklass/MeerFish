@@ -24,6 +24,18 @@ def dPell_dtheta(ells,k,theta_id,tau):
         res[t] = np.ravel(subres)
     return np.ravel(res)
 
+def dPell_dtheta_Bernal(ells,k,theta_id,tau):
+    ## As above but DOES NOT multiply by k so that 2 factors of deltaP/deltatheta in Fisher matrix picks up k^2 term.
+    '''Obtain derivative vectors looping over tracer and multipoles'''
+    ntau,nell,nk = len(tau),len(ells),len(k)
+    res = np.zeros((ntau,nell*nk))
+    subres = np.zeros((nell,nk))
+    for t in range(ntau):
+        for i,ell_i in enumerate(ells):
+            subres[i] = dPell_dtheta_stencil(k,ell_i,theta_id,tau[t])
+        res[t] = np.ravel(subres)
+    return np.ravel(res)
+
 def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     '''Numerical derivation using five-point stencil method -
     see eq201 in Euclid paper: https://www.aanda.org/articles/aa/pdf/2020/10/aa38071-20.pdf'''
@@ -58,13 +70,18 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     np2m = nuispars - kick_ind_nuis*2*kick
     if theta_id==r'$A_{\rm BAO}$': # individual case for BAO wiggles detection (involved smoothed power):
         Pk_smooth,f_BAO = model.Pk_noBAO(model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal),k)
+        '''
+        ## Numerical derivative:
         return (-1*(1 + (A_BAO+2*kick)*f_BAO )*Pk_smooth + 8*(1 + (A_BAO+1*kick)*f_BAO )*Pk_smooth \
         -  8*(1 + (A_BAO-1*kick)*f_BAO )*Pk_smooth + (1 + (A_BAO-2*kick)*f_BAO )*Pk_smooth) / (12*kick)
+        '''
+        return Pk_smooth * f_BAO # analytical derivative equivalent to above numerical one (validated)
+
     else:
         return (-1*model.P_ell(ell,k,Pmod,cp2p,surveypars,np2p,tracer,dampsignal) + 8*model.P_ell(ell,k,Pmod,cpp,surveypars,npp,tracer,dampsignal) \
          - 8*model.P_ell(ell,k,Pmod,cpm,surveypars,npm,tracer,dampsignal) + model.P_ell(ell,k,Pmod,cp2m,surveypars,np2m,tracer,dampsignal)) / (12*kick)
 
-def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,dampsignal_=True):
+def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,dampsignal_=True,Bernal=False):
     '''Compute Fisher matrix for multipoles with parameter set [theta]'''
 
     global z,Pmod,cosmopars,surveypars,nuispars,dampsignal
@@ -72,7 +89,7 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
     global amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2
 
     amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX
@@ -89,33 +106,44 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
     dk = np.mean(dk) # reduce array to a single number
     Npar = len(theta_ids)
 
-    Cinv = np.linalg.inv( Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau) )
+    Cinv = np.linalg.inv( Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau,Bernal) )
+
     F = np.zeros((Npar,Npar)) # Full Fisher matrix summed over tracers
     for i in range(Npar):
         def deriv_i(k):
             return dPell_dtheta(ells,k,theta_ids[i],tau)
+        if Bernal==True: dP_i = dPell_dtheta_Bernal(ells, k, theta_ids[i], tau)
+
         for j in range(Npar):
             if j>=i: # avoid calculating symmetric off-diagonals twice
+                
                 def deriv_j(k):
                     return dPell_dtheta(ells,k,theta_ids[j],tau)
-                # Sum over ell and integrate over k in one big matrix operation:
-                F[i,j] += dk * np.dot( np.dot( deriv_i(k).T,Cinv ) , deriv_j(k) )
-                '''
-                #### SANITY CHECK: THIS LOOP GIVES IDENTICAL RESULT AS ABOVE DOT PRODUCT OPERATION #####
-                dPdth_i,dPdth_j = deriv_i(k),deriv_j(k)
-                for s0 in range(nell*ntau):
-                    for s1 in range(nell*ntau):
-                        F[i,j] += np.sum( dk * dPdth_i[s0*nk:(s0+1)*nk] * np.diag(Cinv[s0*nk:(s0+1)*nk,s1*nk:(s1+1)*nk]) * dPdth_j[s1*nk:(s1+1)*nk] )
-                '''
+                if Bernal==True: dP_j = dPell_dtheta_Bernal(ells, k, theta_ids[j], tau)
+                
+                if Bernal==False:
+                    # Sum over ell and integrate over k in one big matrix operation:
+                    F[i,j] += dk * np.dot( np.dot( deriv_i(k).T,Cinv ) , deriv_j(k) )
+                    '''
+                    #### SANITY CHECK: THIS LOOP GIVES IDENTICAL RESULT AS ABOVE DOT PRODUCT OPERATION #####
+                    dPdth_i,dPdth_j = deriv_i(k),deriv_j(k)
+                    for s0 in range(nell*ntau):
+                        for s1 in range(nell*ntau):
+                            F[i,j] += np.sum( dk * dPdth_i[s0*nk:(s0+1)*nk] * np.diag(Cinv[s0*nk:(s0+1)*nk,s1*nk:(s1+1)*nk]) * dPdth_j[s1*nk:(s1+1)*nk] )
+                    '''
+                if Bernal==True:
+                        F[i,j] = np.dot(dP_i.T, np.dot(Cinv, dP_j))           
+
             if j<i: F[i,j] = F[j,i]
-    F *= V_bin/(4*np.pi**2)
+
+        if Bernal==False: F *= V_bin/(4*np.pi**2)
     return F
 
-def Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau):
+def Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau,Bernal=False):
     ''' (n_ell * nk) X (n_ell * nk) multi-tracer [t1xt2] reduced covariance matrix
     for multipoles where each element integrates over mu '''
     nell,nk = len(ells),len(k)
-    mu = np.linspace(0,1,1000)
+    mu = np.linspace(-1,1,1000)
     kgrid,mugrid = np.meshgrid(k,mu)
     ntau = len(tau)
     C = np.zeros((ntau*nell*nk,ntau*nell*nk))
@@ -125,12 +153,17 @@ def Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau):
             for i,ell_i in enumerate(ells):
                 for j,ell_j in enumerate(ells):
                     # Get correct covariance matrix depending on tracer combination:
-                    if tau[t0]=='X' and tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * ( model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'X',dampsignal)**2 + model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'1',dampsignal)*model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'2',dampsignal) )
+                    if tau[t0]=='X' and tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1)/4 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * ( model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'X',dampsignal)**2 + model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'1',dampsignal)*model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'2',dampsignal) )
                     else:
-                        if tau[t0]==tau[t1]: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t0],dampsignal)**2
+                        if tau[t0]==tau[t1]: integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t0],dampsignal)**2
                         else:
-                            if tau[t0]=='X' or tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t0],dampsignal) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t1],dampsignal)
-                            else: integrand = (2*ell_i+1)*(2*ell_j+1) * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'X',dampsignal)**2
+                            if tau[t0]=='X' or tau[t1]=='X': integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t0],dampsignal) * model.P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tau[t1],dampsignal)
+                            else: integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * model.P(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,'X',dampsignal)**2
+
+                    if Bernal==True: # only for auto-correlations
+                        sigma2 = model.sigma_error(kgrid, mugrid, Pmod, cosmopars, surveypars, nuispars, tau[t0])**2
+                        integrand = (2*ell_i+1)*(2*ell_j+1)/2 * Leg(ell_i)(mugrid)*Leg(ell_j)(mugrid) * sigma2
+
                     # Calculating k's along diagonal of each multipole permutation in C
                     #  - first compute 1D diagonal array "C_diag" to place into broader C matrix:
                     C_diag = scipy.integrate.simpson(integrand, x=mu, axis=0) # integrate over mu axis (axis=0)
@@ -148,7 +181,7 @@ def Matrix_2D(theta_ids,k,Pmod_,cosmopars_,surveypars_,tracer='HI',dampsignal_=T
 
     #global V_bin
     amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
-    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
+    z,V_bin1,V_bin2, V_binX, theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT':V_bin = np.min([V_bin1,V_bin2])
@@ -389,7 +422,7 @@ def check_stencil_convergence(theta_id, ells, k, tracer, Pmod_, cosmopars_, surv
     Pmod=Pmod_; cosmopars=cosmopars_; surveypars=surveypars_
     global amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL
     amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A_BAO,f_NL,beta1,beta2 = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     if tracer=='1': V_bin = V_bin1
     if tracer=='2': V_bin = V_bin2
     if tracer=='X' or tracer=='MT': V_bin = V_binX

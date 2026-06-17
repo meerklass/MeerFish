@@ -142,11 +142,27 @@ def P_N(z,A_sky,t_tot,N_dish,T_sys=None,A_pix=None,theta_FWHM=None,deltanu=0.2,e
     if return_sigma==False: return P_N
     else: return sigma_N,P_N
 
+def apply_kcuts(k,mu,kcuts=None):
+    '''Trim k and mu arrays according to kperp,kpara cuts'''
+    #kcuts: [k_perp_min,k_para_min,k_perp_max,k_para_max]
+    if kcuts is None: return 1 # no cuts
+    k_para,k_perp = k*mu,k*np.sqrt(1-mu**2)
+    mask = np.ones_like(k, dtype=bool) # True when within kcuts boundaries
+    if kcuts[0] is not None:
+        mask &= (k_perp > kcuts[0])
+    if kcuts[1] is not None:
+        mask &= (k_para > kcuts[1])
+    if kcuts[2] is not None:
+        mask &= (k_perp < kcuts[2])
+    if kcuts[3] is not None:
+        mask &= (k_para < kcuts[3])
+    return mask
+
 def P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' 2D signal model for power spectrum '''
     ### dampsignal=True: will directly apply instrumental effects to signal (caution this can add non-cosmological information)
     amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL,beta1,beta2 = cosmopars
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # don't apply instrumental damping to signal power
         if beta1!=1 or beta2!=-1: # reparameterise with beta=f/b parameters
@@ -178,17 +194,20 @@ def P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
 def P_ell(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' Integrate signal model over mu into multipole ell '''
     ### dampsignal=True: will directly apply instrumental effects to signal (caution this can add non-cosmological information)
-    mu_1d = np.linspace(0,1,1000)
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
+    mu_1d = np.linspace(-1,1,1000)
     k_m,mu_m = np.meshgrid(k_1d,mu_1d)
     amp1,amp2,b1,b2,bphi1,bphi2,f,a_perp,a_para,A,f_NL,beta1,beta2 = cosmopars
     k_t,mu_t = APpars(k_m,mu_m,a_perp,a_para)
     alpha_v = 1/a_para*1/a_perp**2 # alpha factor to correct for the modification of the volume
-    return alpha_v * (2*ell + 1) * scipy.integrate.simpson( P(k_t,mu_t,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mu_m) , x=mu_1d, axis=0) # integrate over mu axis (axis=0)
+    integrand = P(k_t,mu_t,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mu_m) * apply_kcuts(k_m,mu_m,kcuts)
+    result = alpha_v * (2*ell + 1)/2 * scipy.integrate.simpson( integrand , x=mu_1d, axis=0) # integrate over mu axis (axis=0)
+    return result[result!=0] # ensure no zero contributions after kcuts
 
 def P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not apply instrumental effects to noise since it remains in signal
-    ''' 2D observational power spectrum with noise components'''
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
+    ''' 2D observational power spectrum with noise components'''    
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # damp noise terms to inflate errors
         if tracer=='1': return P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) + (P_N1 + dsys) \
@@ -204,33 +223,40 @@ def P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
 def P_ell_obs(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' Integrate observation model over mu into multipole ell '''
     ### dampsignal=True: will not apply instrumental effects to noise since it remains in signal
-    mu = np.linspace(0,1,1000)
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
+    mu = np.linspace(-1,1,1000)
     kgrid,mugrid = np.meshgrid(k,mu)
-    return (2*ell + 1) * scipy.integrate.simpson( P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mugrid) , x=mu, axis=0) # integrate over mu axis (axis=0)
+    integrand = P_obs(kgrid,mugrid,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal) * Leg(ell)(mugrid) * apply_kcuts(kgrid,mugrid,kcuts)
+    result = (2*ell + 1)/2 * scipy.integrate.simpson( integrand , x=mu, axis=0) # integrate over mu axis (axis=0)
+    return result[result!=0] # ensure no zero contributions after kcuts
 
 def sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ### dampsignal=True: will not contain instrumental effects in noise (thus errors) since it remains in signal
     P_obs_ = P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)
-    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu = surveypars
-    if tracer=='1': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin1))
-    if tracer=='2': return P_obs_/np.sqrt(Nmodes(k,mu,V_bin2))
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
+    if tracer=='1': return P_obs_/np.sqrt(Nmodes(k,V_bin1))
+    if tracer=='2': return P_obs_/np.sqrt(Nmodes(k,V_bin2))
     if tracer=='X':
         P_1 = P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer='1',dampsignal=dampsignal)
         P_2 = P_obs(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer='2',dampsignal=dampsignal)
-        return np.sqrt( 1/(2*Nmodes(k,mu,V_binX)) * (P_obs_**2 + P_1*P_2) )
+        return np.sqrt( 1/(2*Nmodes(k,V_binX)) * (P_obs_**2 + P_1*P_2) )
 
 def sigma_ell_error(ell,k_1d,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     ''' Integrate error model over mu into multipole ell '''
     ### dampsignal=True: will not contain instrumental effects in noise (thus errors) since it remains in signal
-    mu_1d = np.linspace(0,1,1000)
+    z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
+    mu_1d = np.linspace(-1,1,1000)
     k,mu = np.meshgrid(k_1d,mu_1d)
-    return np.sqrt( (2*ell + 1)**2 * scipy.integrate.simpson( sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)**2 * Leg(ell)(mu)**2 , x=mu_1d, axis=0) ) # integrate over mu axis (axis=0)
+    integrand = sigma_error(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal)**2 * Leg(ell)(mu)**2 * apply_kcuts(k,mu,kcuts)
+    result = np.sqrt( (2*ell + 1)**2/2 * scipy.integrate.simpson( integrand , x=mu_1d, axis=0) ) # integrate over mu axis (axis=0)
+    return result[result!=0] # ensure no zero contributions after kcuts
 
-def Nmodes(k,mu,V_bin):
-    # leave out dmu term from standard definition otherwise its double counted
-    #    in scipy.integrate.simpson integral over mu when obtaining P_ell error
+def Nmodes(k,V_bin):
+    # Full mu-range effective count for each k-shell: 
+    # N = (V k^2 dk / 8π^2) * ∫_{-1}^{1} dmu = V k^2 dk / 8π^2 * 2
+    # Do not include dmu here; the mu integration is handled by scipy.integrate.simpson.
     dk = np.mean(np.diff(k[0,:]))
-    return k**2*dk*V_bin / (8*np.pi**2)
+    return k**2*dk*V_bin / (8*np.pi**2) * 2
 
 def B_beam(mu,k,z,theta_FWHM):
     ''' Gaussian beam model '''
