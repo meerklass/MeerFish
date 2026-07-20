@@ -9,6 +9,7 @@ from matplotlib.patches import Ellipse
 from matplotlib.gridspec import GridSpec
 import model
 import cosmo
+from scipy.interpolate import interp1d
 
 epsilon = 1e-2 # differential step size
 
@@ -69,7 +70,18 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     np2p = nuispars + kick_ind_nuis*2*kick
     np2m = nuispars - kick_ind_nuis*2*kick
     if theta_id==r'$A_{\rm BAO}$': # individual case for BAO wiggles detection (involved smoothed power):
+        
+        # Smoothed P_HI_ell:
+        '''
         Pk_smooth,f_BAO = model.Pk_noBAO(model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal),k)
+        '''
+
+        # Smoothed matter P_m:
+        Pk = model.P_ell(ell,k,Pmod,cosmopars,surveypars,nuispars,tracer) # ordinary multipole with wiggles
+        Pmod_smooth = cosmo.smoothPmod(Pmod)
+        Pk_smooth = model.P_ell(ell,k,Pmod_smooth,cosmopars,surveypars,nuispars,tracer) # smooth multipole no wiggles
+        f_BAO = (Pk - Pk_smooth) / Pk_smooth
+
         '''
         ## Numerical derivative:
         return (-1*(1 + (A_BAO+2*kick)*f_BAO )*Pk_smooth + 8*(1 + (A_BAO+1*kick)*f_BAO )*Pk_smooth \
@@ -136,7 +148,7 @@ def Matrix_ell(theta_ids,k,Pmod_,cosmopars_,surveypars_,nuispars_,ells,tracer,da
 
             if j<i: F[i,j] = F[j,i]
 
-        if Bernal==False: F *= V_bin/(4*np.pi**2)
+    if Bernal==False: F *= V_bin/(4*np.pi**2)
     return F
 
 def Cov_ell(ells,k,Pmod,cosmopars,surveypars,nuispars,tau,Bernal=False):

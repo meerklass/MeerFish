@@ -165,7 +165,7 @@ def P(k,mu,Pmod,cosmopars,surveypars,nuispars,tracer,dampsignal=True):
     z,V_bin1,V_bin2,V_binX,theta_FWHM1,theta_FWHM2,sigma_z1,sigma_z2,P_N1,P_N2,k_fg,dpix,dnu,kcuts = surveypars
     dbeam,dsys,dphotoz = nuispars
     if dampsignal==False: # don't apply instrumental damping to signal power
-        if beta1!=1 or beta2!=-1: # reparameterise with beta=f/b parameters
+        if beta1!=-1 or beta2!=-1: # reparameterise with beta=f/b parameters
             # can't do f_NL in this case so these params ignored
             if tracer=='1': return amp1**2 * (1 + beta1*mu**2)**2 * Pmod(k) + dsys
             if tracer=='2': return amp2**2 * (1 + beta2*mu**2)**2 * Pmod(k)
@@ -352,9 +352,9 @@ def P_1D(k_m,mu_m,Pmod,cosmopars,surveypars,nuispars,tracer):
     return kpara_centers, P1D
 
 
-def Pk_noBAO(Pk,k,#kBAO=[0.03,0.3]
+def Pk_noBAO(Pk,k,kBAO=[0.03,0.3]
         ):
-    kBAO=[k[1],k[-2]] # Use this as default instead
+    #kBAO=[k[1],k[-2]] # Use this as default instead
 
     """ Code from Ze - following Phil Bull method (https://arxiv.org/pdf/1405.1452.pdf)
     Construct a smooth power spectrum with BAOs removed, and a corresponding

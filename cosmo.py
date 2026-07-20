@@ -113,13 +113,13 @@ def D_com(z,cosmopars=None):
         #return scipy.integrate.romberg(func,0,z) * h_new
         #### NOT DIALATING little h ######
         h = H_0_fid/100
-        return scipy.integrate.romberg(func,0,z) * h
+        return scipy.integrate.quad(func,0,z)[0] * h
         ####################################
 
     #Comoving distance [Mpc/h]
     func = lambda z: (c_km/H_0)/E(z)
     h = H_0/100
-    return scipy.integrate.romberg(func,0,z) * h
+    return scipy.integrate.quad(func,0,z)[0] * h
 
 def D_ang(A,z):
     '''Compute comoiving transverse distance for a survey with area A at redshift z'''
@@ -210,6 +210,11 @@ def MatterPk(z,kmin=1e-5,kmax=10,NonLinear=False):
     global T
     T = interp1d(k_trans, transfer_func) # Transfer function - set to global variable
     return interp1d(k,pk[0],kind='cubic')
+
+def smoothPmod(Pmod):
+    kk = np.linspace(2e-5,1,10000) # use for high-fidelity interpolation over smoothed matter power
+    Pmod_smooth = interp1d(kk,meerfish_model.Pk_noBAO(Pmod(kk),kk)[0],kind='cubic') # interpolated smooth matter P_m
+    return Pmod_smooth
 
 ### Modified gravity approximations of fsigma8 parameterised  by \mu
 # Background functions

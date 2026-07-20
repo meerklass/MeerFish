@@ -158,6 +158,7 @@ def Vsur(zmin,zmax,Area):
     ''' Survey volume in [Mpc/h]^3 '''
     cosmo.SetCosmology(z=np.mean([zmin,zmax]))
     H0 = cosmo.H(0)
+    h = H0/100
     Omega_A = Area * (np.pi/180)**2
-    func = lambda z: Omega_A*c_km*cosmo.D_com(z)**2 / (H0*cosmo.E(z))
-    return scipy.integrate.romberg(func,zmin,zmax)
+    func = lambda z: Omega_A*c_km*cosmo.D_com(z)**2 / (H0*cosmo.E(z)) * h
+    return scipy.integrate.quad(func,zmin,zmax)[0]
