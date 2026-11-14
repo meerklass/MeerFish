@@ -57,9 +57,9 @@ def dPell_dtheta_stencil(k,ell,theta_id,tracer):
     if theta_id==r'$\beta_2$': kick,kick_ind[12] = beta2*epsilon,1
     ## nuisance parameters:
     kick_ind_nuis = np.zeros(len(nuispars)) # binary mask to select input parameter to kick
-    if theta_id==r'$\delta_{\rm b}$': kick,kick_ind[0] = epsilon*1e-2,1 # set kick=epsilon to avoid divide by zero and zero kick
-    if theta_id==r'$\delta_{\rm sys}$': kick,kick_ind[1] = epsilon,1 # set kick=epsilon to avoid divide by zero and zero kick
-    if theta_id==r'$\delta_{\rm z}$': kick,kick_ind[2] = epsilon*1e-2,1 # set kick=epsilon to avoid divide by zero and zero kick
+    if theta_id==r'$\delta_{\rm b}$': kick,kick_ind_nuis[0] = epsilon*1e-2,1 # set kick=epsilon to avoid divide by zero and zero kick
+    if theta_id==r'$\delta_{\rm sys}$': kick,kick_ind_nuis[1] = epsilon,1 # set kick=epsilon to avoid divide by zero and zero kick
+    if theta_id==r'$\delta_{\rm z}$': kick,kick_ind_nuis[2] = epsilon*1e-2,1 # set kick=epsilon to avoid divide by zero and zero kick
     ## apply kick to chosen parameter and input into stencil:
     cpp = cosmopars + kick_ind*kick
     cpm = cosmopars - kick_ind*kick

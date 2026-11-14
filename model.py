@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import cosmo
 import scipy
@@ -81,7 +82,7 @@ def Tsys(z):
     """Ze's function: returns interpolated system temperature in mK"""
     #in MHz, K
     HI = 1420 #MHz
-    nu,Tsys_eta,a_eff = np.loadtxt('/Users/sadmin/Documents/MeerFish/Tsys/UHF_Tsys.txt',unpack=True) # set to location of MeerFish
+    nu,Tsys_eta,a_eff = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),'Tsys','UHF_Tsys.txt'),unpack=True)
     ratio = 0.72
     T_sys_meerkat_rep = splrep(nu,Tsys_eta)
     T_sys_meerkat = splev( HI / (1+z), T_sys_meerkat_rep )
