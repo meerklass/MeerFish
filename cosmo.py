@@ -12,6 +12,7 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=F
     global H_0
     global h
     global D_z # Growth function D(z)
+    global D_md_z # Growth function normalised to 1/(1+z) in matter domination (for PNG)
     global Om0
     global Ob0
     global n_s
@@ -37,6 +38,7 @@ def SetCosmology(builtincosmo='Planck18',z=0,return_cosmopars=False,ZesVersion=F
         n_s = 0.965
     A_s = 2.14e-9 # Scalar amplitude
     D_z = D(z) # Growth Function (normalised to unity for z=0)
+    D_md_z = D_md(z) # Growth Function normalised to 1/(1+z) in matter domination (CMB f_NL convention)
     delta_c = 1.686
     MatterPk(z,1e-4,1e0,NonLinear=False) # Use to set global transfer function T
     if return_cosmopars==True:
@@ -139,24 +141,27 @@ def Deltab(z,k,f_NL,b_HI):
                                #   range. Uses convention T(k->0)=1
     T_k[k>kmin_interp] = T(k[k>kmin_interp]) # Evalutate transfer function for all k>0
     k[k==0] = 1e-30 # Avoid divive by zero error in final return statement
-    return 3*f_NL*( (b_HI-1)*Om0*H_0**2*delta_c ) / (c_km**2*k**2*T_k*D_z)
+    # k in [h/Mpc] so convert to [1/Mpc] with k*h; D_md for CMB f_NL convention
+    return 3*f_NL*( (b_HI-1)*Om0*H_0**2*delta_c ) / (c_km**2*(k*h)**2*T_k*D_md_z)
 
 def M(k,z):
     ## PNG parameter as defined after eq2.1 in https://arxiv.org/pdf/2302.09066.pdf
     T_k = np.ones(np.shape(k)) # Use to avoid evaluating T(k) outside interpolation
                                #   range. Uses convention T(k->0)=1
     T_k[k>kmin_interp] = T(k[k>kmin_interp]) # Evalutate transfer function for all k>0
-    return 2/3 * c_km**2 * k**2 * T_k * D_z / (Om0 * H_0**2)
+    # k in [h/Mpc] so convert to [1/Mpc] with k*h; D_md for CMB f_NL convention
+    return 2/3 * c_km**2 * (k*h)**2 * T_k * D_md_z / (Om0 * H_0**2)
     #return 2/3 * k**2 * T_k / (Om0 * H_0**2) # version from eq1.5 https://arxiv.org/pdf/2006.09368.pdf
 
-def D(z):
+def D_md(z):
     #Growth parameter - obtained from eq90 in:
     #   https://www.astro.rug.nl/~weygaert/tim1publication/lss2009/lss2009.linperturb.pdf
+    #   Normalised such that D_md -> 1/(1+z) in matter domination (needed for PNG/f_NL)
     integrand = lambda zi: (1+zi)/(H(zi)**3)
-    D_0 = 5/2 * Om0 * H_0**2 * H(0) * integrate.quad(integrand, 0, 1e3)[0]
-    if z==0: return D_0 # Growth factor normalisation factor
-    D_z = 5/2 * Om0 * H_0**2 * H(z) * integrate.quad(integrand, z, 1e3)[0]
-    return D_z / D_0 # Normalise such that D(z=0) = 1
+    return 5/2 * Om0 * H_0**2 * H(z) * integrate.quad(integrand, z, 1e3)[0]
+
+def D(z):
+    return D_md(z) / D_md(0) # Normalise such that D(z=0) = 1
 
 def sigma_8(z=None):
     if z is None: # Extract sigma_8 at CAMB redshit using defined global results from MatterPk function
